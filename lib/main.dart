@@ -588,7 +588,32 @@ class _ContentViewState extends State<ContentView> {
     setState(() => analyzing = true);
 
     try {
-      final result = await NetworkManager().analyzeImage(pickedImageBase64!);
+      AnalysisResult result;
+      
+      // If we have barcode info, use AI with barcode data (no Google Lens)
+      if (_scannedBarcodeInfo != null && _scannedBarcodeInfo!.needsAIAnalysis) {
+        print('🤖 Analyzing with barcode info: ${_scannedBarcodeInfo!.productName}');
+        result = await NetworkManager().analyzeWithBarcodeInfo(
+          pickedImageBase64!,
+          _scannedBarcodeInfo!.productCode ?? '',
+          _scannedBarcodeInfo!.productName ?? '',
+        );
+        
+        // Override brand/product from barcode if AI didn't find better
+        if (result.brand == 'unknown' || result.brand.isEmpty) {
+          result = AnalysisResult(
+            type: result.type,
+            specificType: result.specificType,
+            colors: result.colors,
+            brand: _scannedBarcodeInfo!.brand ?? result.brand,
+            product: _scannedBarcodeInfo!.productName ?? result.product,
+          );
+        }
+      } else {
+        // No barcode info, use regular analysis with Google Lens
+        print('🔍 Analyzing with Google Lens...');
+        result = await NetworkManager().analyzeImage(pickedImageBase64!);
+      }
 
       final clothing = Clothing(
         id: 0,
@@ -612,6 +637,7 @@ class _ContentViewState extends State<ContentView> {
         pickedImageBase64 = null;
         newName = '';
         analyzing = false;
+        _scannedBarcodeInfo = null; // Clear barcode info
       });
     } catch (e) {
       setState(() => analyzing = false);
@@ -788,6 +814,7 @@ class _ContentViewState extends State<ContentView> {
       });
     }
   }
+  BrandInfo? _scannedBarcodeInfo;
 
   Future<void> _scanQRCode() async {
     final result = await Navigator.push<String>(
@@ -811,75 +838,48 @@ class _ContentViewState extends State<ContentView> {
           print('🏷️ Product name: ${brandInfo.productName}');
         }
         
+        // Store for AI analysis
+        _scannedBarcodeInfo = brandInfo;
+        
         setState(() {
-          newName = brandInfo.brand ?? 'Unknown';
+          newName = brandInfo.productName ?? brandInfo.brand ?? 'Unknown';
         });
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ Detected: ${brandInfo.brand} - ${brandInfo.productCode}'),
-              duration: const Duration(seconds: 4),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('✅ ${brandInfo.brand ?? "Product"} detected!'),
+                  if (brandInfo.productName != null)
+                    Text(brandInfo.productName!, style: const TextStyle(fontSize: 12)),
+                  const SizedBox(height: 4),
+                  const Text('📸 Now take a photo for color/type analysis', style: TextStyle(fontSize: 11)),
+                ],
+              ),
+              duration: const Duration(seconds: 5),
               backgroundColor: Colors.green,
             ),
           );
         }
       } else {
-        // Brand not recognized, try API fallback
-        print('⚠️ Brand not recognized, trying API fallback...');
+        // Brand not recognized
+        print('⚠️ Brand not recognized');
+        _scannedBarcodeInfo = null;
         
-        if (result.startsWith('http://') || result.startsWith('https://')) {
-          // Show loading indicator
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Row(
-                  children: [
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    ),
-                    SizedBox(width: 12),
-                    Text('Analyzing product URL with AI...'),
-                  ],
-                ),
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-          
-          // TODO: Call API to analyze the URL
-          // final apiBrandInfo = await BrandParserRegistry.parseWithAPI(result);
-          
-          await Future.delayed(const Duration(seconds: 1));
-          
-          if (mounted) {
-            ScaffoldMessenger.of(context).clearSnackBars();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('❌ Unable to identify this product. Please add manually.'),
-                duration: Duration(seconds: 4),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          
-          print('❌ API analysis not implemented yet');
-        } else {
-          // Not a URL and not recognized
-          setState(() {
-            newName = 'Product $result';
-          });
-          
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Scanned code: $result'),
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          }
+        setState(() {
+          newName = 'Product $result';
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Scanned: $result - Please add details manually'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
         }
       }
     }
@@ -2186,6 +2186,11 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         children: [
           MobileScanner(
             controller: cameraController,
+            scanWindow: Rect.fromCenter(
+              center: MediaQuery.of(context).size.center(Offset.zero),
+              width: 250,
+              height: 250,
+            ),
             onDetect: (capture) {
               if (!isScanned) {
                 final List<Barcode> barcodes = capture.barcodes;

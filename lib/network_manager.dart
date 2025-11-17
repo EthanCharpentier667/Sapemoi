@@ -9,6 +9,7 @@ class NetworkManager {
 
   final String endpoint = 'https://sapemoi-api.onrender.com/analyze';
   final String totalEndpoint = 'https://sapemoi-api.onrender.com/total';
+  final String analyzeWithInfoEndpoint = 'https://sapemoi-api.onrender.com/analyze_with_info';
 
   Future<Map<String, dynamic>> estimateWardrobeValue(
     List<Map<String, dynamic>> items, {
@@ -136,6 +137,78 @@ class NetworkManager {
       );
     } catch (e) {
       print('❌ Network error: $e');
+      rethrow;
+    }
+  }
+
+  /// Analyze image with pre-existing barcode info (no Google Lens needed)
+  Future<AnalysisResult> analyzeWithBarcodeInfo(
+    String base64Image,
+    String productCode,
+    String productName, {
+    Duration timeout = const Duration(minutes: 2),
+  }) async {
+    try {
+      print('🤖 Analyzing image with barcode info...');
+      print('   Product: $productName ($productCode)');
+
+      final payload = {
+        'base64': base64Image,
+        'product_code': productCode,
+        'product_name': productName,
+      };
+      final body = json.encode(payload);
+
+      final response = await http
+          .post(
+            Uri.parse(analyzeWithInfoEndpoint),
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(timeout);
+
+      print('📥 Response status: ${response.statusCode}');
+
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
+      }
+
+      final jsonData = json.decode(response.body) as Map<String, dynamic>;
+      print('✅ AI analysis complete');
+
+      if (jsonData.containsKey('error')) {
+        throw Exception('API Error: ${jsonData['error']}');
+      }
+
+      final choices = jsonData['choices'] as List<dynamic>?;
+      if (choices == null || choices.isEmpty) {
+        throw Exception('Missing "choices" in response');
+      }
+
+      final message = choices.first['message'] as Map<String, dynamic>?;
+      final content = message?['content'] as String?;
+
+      if (content == null) {
+        throw Exception('Missing message or content in choices');
+      }
+
+      final type = _parseType(content);
+      final specificType = _parseSpecificType(content);
+      final colors = _parseColors(content);
+      final brand = _parseBrand(content);
+      final product = _parseProduct(content);
+
+      print('✅ AI Parsed - type: $type, specificType: $specificType, colors: ${colors.length}');
+
+      return AnalysisResult(
+        type: type,
+        specificType: specificType,
+        colors: colors,
+        brand: brand,
+        product: product,
+      );
+    } catch (e) {
+      print('❌ AI analysis error: $e');
       rethrow;
     }
   }

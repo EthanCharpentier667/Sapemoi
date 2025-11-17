@@ -12,6 +12,7 @@ class BrandInfo {
   final String? imageUrl;
   final String? description;
   final Map<String, dynamic>? additionalData;
+  final bool needsAIAnalysis; // True if we should send to AI for color/type analysis
 
   BrandInfo({
     this.brand,
@@ -24,6 +25,7 @@ class BrandInfo {
     this.imageUrl,
     this.description,
     this.additionalData,
+    this.needsAIAnalysis = false,
   });
 
   bool get hasEnoughData => brand != null || productName != null;
@@ -125,22 +127,37 @@ class BarcodeScanner {
         print('✅ Product found via API');
         print('Brand: ${apiResult.brand}');
         print('Product: ${apiResult.productName}');
+        print('⏭️  Will send to AI for color/type analysis');
         print('====================================');
-        return apiResult;
+        // Mark as needing AI analysis for colors/type
+        return BrandInfo(
+          brand: apiResult.brand,
+          productCode: apiResult.productCode,
+          productName: apiResult.productName,
+          category: apiResult.category,
+          imageUrl: apiResult.imageUrl,
+          description: apiResult.description,
+          additionalData: apiResult.additionalData,
+          needsAIAnalysis: true, // Send to AI for color/type
+        );
       } else if (brand != null) {
         print('⚠️ API lookup failed, using GS1 brand only');
+        print('⏭️  Will send to AI for complete analysis');
         print('====================================');
         return BrandInfo(
           brand: brand,
           productCode: normalizedCode,
           productName: 'Product',
+          needsAIAnalysis: true,
         );
       } else {
         print('❌ Product not found in any database');
+        print('⏭️  Will send to AI for analysis');
         print('====================================');
         return BrandInfo(
           productCode: normalizedCode,
           productName: 'Unknown Product',
+          needsAIAnalysis: true,
         );
       }
     } else if (lowerCode.startsWith('http://') || lowerCode.startsWith('https://')) {
