@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:math';
@@ -782,6 +783,48 @@ class _ContentViewState extends State<ContentView> {
     }
   }
 
+  Future<void> _scanQRCode() async {
+    final result = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const QRScannerScreen(),
+      ),
+    );
+
+    if (result != null) {
+      String parsedInfo = result;
+      
+      if (RegExp(r'^\d+$').hasMatch(result)) {
+        parsedInfo = 'Product code: $result';
+      }
+      else if (result.startsWith('http://') || result.startsWith('https://')) {
+        final uri = Uri.tryParse(result);
+        if (uri != null) {
+          final segments = uri.pathSegments;
+          if (segments.isNotEmpty) {
+            parsedInfo = segments.last.replaceAll('-', ' ').replaceAll('_', ' ');
+          }
+        }
+      }
+      
+      setState(() {
+        newName = parsedInfo;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Scanned: $result'),
+            action: SnackBarAction(
+              label: 'OK',
+              onPressed: () {},
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   // MARK: - Add Modal
   Widget _buildAddModal() {
     return Container(
@@ -858,6 +901,15 @@ class _ContentViewState extends State<ContentView> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: _scanQRCode,
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('Scan Product QR Code'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50),
+                ),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -2014,5 +2066,131 @@ class ClothingCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// MARK: - QR Scanner Screen
+class QRScannerScreen extends StatefulWidget {
+  const QRScannerScreen({super.key});
+
+  @override
+  State<QRScannerScreen> createState() => _QRScannerScreenState();
+}
+
+class _QRScannerScreenState extends State<QRScannerScreen> {
+  MobileScannerController cameraController = MobileScannerController();
+  bool isScanned = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Scan Product Code'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.flip_camera_ios),
+            onPressed: () => cameraController.switchCamera(),
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          MobileScanner(
+            controller: cameraController,
+            onDetect: (capture) {
+              if (!isScanned) {
+                final List<Barcode> barcodes = capture.barcodes;
+                for (final barcode in barcodes) {
+                  if (barcode.rawValue != null) {
+                    // DEBUG: Print all barcode information
+                    print('========== BARCODE SCANNED ==========');
+                    print('Raw Value: ${barcode.rawValue}');
+                    print('Display Value: ${barcode.displayValue}');
+                    print('Format: ${barcode.format}');
+                    print('Type: ${barcode.type}');
+                    print('Corners: ${barcode.corners}');
+                    print('Size: ${barcode.size}');
+                    
+                    // Check if there's additional data
+                    if (barcode.calendarEvent != null) {
+                      print('Calendar Event: ${barcode.calendarEvent}');
+                    }
+                    if (barcode.contactInfo != null) {
+                      print('Contact Info: ${barcode.contactInfo}');
+                    }
+                    if (barcode.driverLicense != null) {
+                      print('Driver License: ${barcode.driverLicense}');
+                    }
+                    if (barcode.email != null) {
+                      print('Email: ${barcode.email}');
+                    }
+                    if (barcode.geoPoint != null) {
+                      print('Geo Point: ${barcode.geoPoint}');
+                    }
+                    if (barcode.phone != null) {
+                      print('Phone: ${barcode.phone}');
+                    }
+                    if (barcode.sms != null) {
+                      print('SMS: ${barcode.sms}');
+                    }
+                    if (barcode.url != null) {
+                      print('URL: ${barcode.url}');
+                    }
+                    if (barcode.wifi != null) {
+                      print('WiFi: ${barcode.wifi}');
+                    }
+                    
+                    print('====================================');
+                    
+                    setState(() => isScanned = true);
+                    Navigator.pop(context, barcode.rawValue);
+                    break;
+                  }
+                }
+              }
+            },
+          ),
+          // Scanning overlay
+          Center(
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white, width: 3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          // Instructions
+          Positioned(
+            bottom: 100,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              margin: const EdgeInsets.symmetric(horizontal: 32),
+              decoration: BoxDecoration(
+                color: Colors.black87,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'Position the QR code or barcode within the frame',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    cameraController.dispose();
+    super.dispose();
   }
 }
