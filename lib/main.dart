@@ -13,12 +13,18 @@ import 'outfit_generator.dart';
 import 'login_page.dart';
 import 'profile_page.dart';
 import 'firebase_options.dart';
+import 'brands/brands_init.dart';
+import 'brands/brand_parser.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  
+  // Initialize barcode scanner
+  initializeBarcodeScanner();
+  
   runApp(const SapemoiApp());
 }
 
@@ -792,35 +798,89 @@ class _ContentViewState extends State<ContentView> {
     );
 
     if (result != null) {
-      String parsedInfo = result;
+      print('\n🔍 Processing scanned code: $result\n');
       
-      if (RegExp(r'^\d+$').hasMatch(result)) {
-        parsedInfo = 'Product code: $result';
-      }
-      else if (result.startsWith('http://') || result.startsWith('https://')) {
-        final uri = Uri.tryParse(result);
-        if (uri != null) {
-          final segments = uri.pathSegments;
-          if (segments.isNotEmpty) {
-            parsedInfo = segments.last.replaceAll('-', ' ').replaceAll('_', ' ');
+      // Try to parse with barcode scanner
+      final brandInfo = await BarcodeScanner.scan(result);
+      
+      if (brandInfo != null && brandInfo.hasEnoughData) {
+        // Successfully parsed!
+        print('✅ Brand detected: ${brandInfo.brand}');
+        print('📦 Product code: ${brandInfo.productCode}');
+        if (brandInfo.productName != null) {
+          print('🏷️ Product name: ${brandInfo.productName}');
+        }
+        
+        setState(() {
+          newName = brandInfo.brand ?? 'Unknown';
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Detected: ${brandInfo.brand} - ${brandInfo.productCode}'),
+              duration: const Duration(seconds: 4),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        // Brand not recognized, try API fallback
+        print('⚠️ Brand not recognized, trying API fallback...');
+        
+        if (result.startsWith('http://') || result.startsWith('https://')) {
+          // Show loading indicator
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Row(
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    ),
+                    SizedBox(width: 12),
+                    Text('Analyzing product URL with AI...'),
+                  ],
+                ),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+          
+          // TODO: Call API to analyze the URL
+          // final apiBrandInfo = await BrandParserRegistry.parseWithAPI(result);
+          
+          await Future.delayed(const Duration(seconds: 1));
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).clearSnackBars();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('❌ Unable to identify this product. Please add manually.'),
+                duration: Duration(seconds: 4),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          
+          print('❌ API analysis not implemented yet');
+        } else {
+          // Not a URL and not recognized
+          setState(() {
+            newName = 'Product $result';
+          });
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Scanned code: $result'),
+                duration: const Duration(seconds: 3),
+              ),
+            );
           }
         }
-      }
-      
-      setState(() {
-        newName = parsedInfo;
-      });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Scanned: $result'),
-            action: SnackBarAction(
-              label: 'OK',
-              onPressed: () {},
-            ),
-          ),
-        );
       }
     }
   }
@@ -2078,8 +2138,31 @@ class QRScannerScreen extends StatefulWidget {
 }
 
 class _QRScannerScreenState extends State<QRScannerScreen> {
-  MobileScannerController cameraController = MobileScannerController();
+  MobileScannerController cameraController = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    facing: CameraFacing.back,
+    torchEnabled: false,
+    formats: [
+      BarcodeFormat.qrCode,
+      BarcodeFormat.ean13,
+      BarcodeFormat.ean8,
+      BarcodeFormat.upcA,
+      BarcodeFormat.upcE,
+      BarcodeFormat.code128,
+      BarcodeFormat.code39,
+    ],
+  );
   bool isScanned = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Add a small delay to ensure camera is ready
+    Future.delayed(const Duration(milliseconds: 500), () {
+      print('📷 Camera initialized and ready to scan');
+      print('💡 Supported formats: QR, EAN-8, EAN-13, UPC-A, Code128, etc.');
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2088,8 +2171,14 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         title: const Text('Scan Product Code'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.flashlight_on),
+            onPressed: () => cameraController.toggleTorch(),
+            tooltip: 'Toggle Flash',
+          ),
+          IconButton(
             icon: const Icon(Icons.flip_camera_ios),
             onPressed: () => cameraController.switchCamera(),
+            tooltip: 'Switch Camera',
           ),
         ],
       ),
