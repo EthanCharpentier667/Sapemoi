@@ -827,42 +827,209 @@ class _ContentViewState extends State<ContentView> {
     if (result != null) {
       print('\n🔍 Processing scanned code: $result\n');
       
-      // Try to parse with barcode scanner
       final brandInfo = await BarcodeScanner.scan(result);
       
-      if (brandInfo != null && brandInfo.hasEnoughData) {
-        // Successfully parsed!
+      if (brandInfo != null && brandInfo.hasEnoughData && brandInfo.needsAIAnalysis) {
+
+        final productNameLower = (brandInfo.productName ?? '').toLowerCase();
+        final isUnknownFromDB = productNameLower.contains('unknown');
+        
+        if (isUnknownFromDB) {
+          print('❌ Product not found in any database - skipping AI analysis');
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('❌ Product not found in databases. Try scanning a clearer barcode or a different product.'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 4),
+                action: SnackBarAction(
+                  label: 'Retry',
+                  textColor: Colors.white,
+                  onPressed: () {
+                    _scanQRCode();
+                  },
+                ),
+              ),
+            );
+          }
+          return;
+        }
+        
         print('✅ Brand detected: ${brandInfo.brand}');
         print('📦 Product code: ${brandInfo.productCode}');
         if (brandInfo.productName != null) {
           print('🏷️ Product name: ${brandInfo.productName}');
         }
         
-        // Store for AI analysis
-        _scannedBarcodeInfo = brandInfo;
-        
-        setState(() {
-          newName = brandInfo.productName ?? brandInfo.brand ?? 'Unknown';
-        });
-        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+              content: Row(
                 children: [
-                  Text('✅ ${brandInfo.brand ?? "Product"} detected!'),
-                  if (brandInfo.productName != null)
-                    Text(brandInfo.productName!, style: const TextStyle(fontSize: 12)),
-                  const SizedBox(height: 4),
-                  const Text('📸 Now take a photo for color/type analysis', style: TextStyle(fontSize: 11)),
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text('🔍 Finding product image and analyzing colors...\n${brandInfo.productName ?? "Product"}'),
+                  ),
                 ],
               ),
-              duration: const Duration(seconds: 5),
-              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 30),
+              backgroundColor: Colors.blue,
             ),
           );
+        }
+        
+        try {
+          final analysisResult = await NetworkManager().analyzeBarcodeProduct(
+            brandInfo.productCode ?? '',
+            brandInfo.productName ?? '',
+            brand: brandInfo.brand,
+          );
+          
+          final productNameLower = (brandInfo.productName ?? '').toLowerCase();
+          final isUnknown = productNameLower.contains('unknown') || 
+                           productNameLower.isEmpty ||
+                           analysisResult.product == 'unknown' || 
+                           analysisResult.product.isEmpty;
+          
+          if (isUnknown) {
+            throw Exception('Product not recognized. Please position the barcode clearly in the frame and try again.');
+          }
+          
+          final finalBrand = brandInfo.brand ?? analysisResult.brand;
+          final finalProduct = brandInfo.productName ?? analysisResult.product;
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).clearSnackBars();
+            
+            final shouldAdd = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('✅ Product Analyzed!'),
+                content: SizedBox(
+                  width: 300,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (analysisResult.imageBase64 != null)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            width: 300,
+                            height: 200,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.memory(
+                                base64Decode(analysisResult.imageBase64!),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                        Text('Brand: $finalBrand', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text('Product: $finalProduct'),
+                        const SizedBox(height: 12),
+                        Text('Type: ${analysisResult.type} (${analysisResult.specificType})'),
+                        Text('Colors: ${analysisResult.colors.length} detected'),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          children: analysisResult.colors.take(5).map((color) {
+                            return Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Color.fromRGBO(color.r, color.g, color.b, 1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Add to Wardrobe'),
+                  ),
+                ],
+              ),
+            );
+            
+            if (shouldAdd == true) {
+              final user = FirebaseAuth.instance.currentUser;
+              if (user != null) {
+                final clothing = Clothing(
+                  id: 0,
+                  name: finalProduct,
+                  imagePath: '',
+                  imageBase64: analysisResult.imageBase64,
+                  type: analysisResult.type,
+                  specificType: analysisResult.specificType,
+                  colors: analysisResult.colors,
+                  brand: finalBrand,
+                  productName: finalProduct,
+                  createdAt: DateTime.now(),
+                );
+                
+                await DBManager().addClothing(clothing, user.uid);
+                await _loadClothes();
+                
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('✅ Item added to wardrobe!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                  setState(() => showAddModal = false);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          print('❌ Auto-analysis failed: $e');
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).clearSnackBars();
+            
+            // Show error with option to retry
+            final retry = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('❌ Product Not Found'),
+                content: Text('$e\n\nWould you like to try scanning again?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Scan Again'),
+                  ),
+                ],
+              ),
+            );
+            
+            if (retry == true) {
+              // Retry scanning
+              _scanQRCode();
+              return;
+            }
+          }
         }
       } else {
         // Brand not recognized
@@ -2142,25 +2309,15 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     detectionSpeed: DetectionSpeed.noDuplicates,
     facing: CameraFacing.back,
     torchEnabled: false,
-    formats: [
-      BarcodeFormat.qrCode,
-      BarcodeFormat.ean13,
-      BarcodeFormat.ean8,
-      BarcodeFormat.upcA,
-      BarcodeFormat.upcE,
-      BarcodeFormat.code128,
-      BarcodeFormat.code39,
-    ],
   );
   bool isScanned = false;
 
   @override
   void initState() {
     super.initState();
-    // Add a small delay to ensure camera is ready
     Future.delayed(const Duration(milliseconds: 500), () {
       print('📷 Camera initialized and ready to scan');
-      print('💡 Supported formats: QR, EAN-8, EAN-13, UPC-A, Code128, etc.');
+      print('💡 ALL formats supported: QR, EAN-8/13, UPC, Code128, GTIN-14, ITF, Codabar, etc.');
     });
   }
 
@@ -2186,76 +2343,163 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         children: [
           MobileScanner(
             controller: cameraController,
-            scanWindow: Rect.fromCenter(
-              center: MediaQuery.of(context).size.center(Offset.zero),
-              width: 250,
-              height: 250,
-            ),
             onDetect: (capture) {
               if (!isScanned) {
                 final List<Barcode> barcodes = capture.barcodes;
+                
+                if (barcodes.isEmpty) return;
+                
+                // Find image dimensions from first barcode corners (estimate from max coordinates)
+                double maxX = 0;
+                double maxY = 0;
                 for (final barcode in barcodes) {
+                  for (final corner in barcode.corners) {
+                    if (corner.dx > maxX) maxX = corner.dx;
+                    if (corner.dy > maxY) maxY = corner.dy;
+                  }
+                }
+                
+                // Estimate camera resolution from detected codes
+                final imageWidth = maxX > 0 ? maxX * 1.2 : 1920.0; // Add margin
+                final imageHeight = maxY > 0 ? maxY * 1.2 : 1080.0;
+                
+                // Define scan area as percentage of image (50% square in center)
+                final scanAreaPercent = 0.5;
+                final scanAreaWidth = imageWidth * scanAreaPercent;
+                final scanAreaHeight = imageHeight * scanAreaPercent;
+                final scanAreaLeft = (imageWidth - scanAreaWidth) / 2;
+                final scanAreaTop = (imageHeight - scanAreaHeight) / 2;
+                final scanAreaRight = scanAreaLeft + scanAreaWidth;
+                final scanAreaBottom = scanAreaTop + scanAreaHeight;
+                
+                print('📍 Estimated camera: ${imageWidth.toInt()}x${imageHeight.toInt()}');
+                print('📍 Scan area: L:${scanAreaLeft.toInt()} T:${scanAreaTop.toInt()} R:${scanAreaRight.toInt()} B:${scanAreaBottom.toInt()}');
+                
+                // Filter barcodes: only those with center inside scan area
+                final barcodesInScanArea = barcodes.where((barcode) {
+                  if (barcode.corners.isEmpty) return false;
+                  
+                  // Calculate center of barcode from corners
+                  double centerX = 0;
+                  double centerY = 0;
+                  for (final corner in barcode.corners) {
+                    centerX += corner.dx;
+                    centerY += corner.dy;
+                  }
+                  centerX /= barcode.corners.length;
+                  centerY /= barcode.corners.length;
+                  
+                  final isInside = centerX >= scanAreaLeft && 
+                                   centerX <= scanAreaRight && 
+                                   centerY >= scanAreaTop && 
+                                   centerY <= scanAreaBottom;
+                  
                   if (barcode.rawValue != null) {
-                    // DEBUG: Print all barcode information
-                    print('========== BARCODE SCANNED ==========');
-                    print('Raw Value: ${barcode.rawValue}');
-                    print('Display Value: ${barcode.displayValue}');
-                    print('Format: ${barcode.format}');
-                    print('Type: ${barcode.type}');
-                    print('Corners: ${barcode.corners}');
-                    print('Size: ${barcode.size}');
-                    
-                    // Check if there's additional data
-                    if (barcode.calendarEvent != null) {
-                      print('Calendar Event: ${barcode.calendarEvent}');
-                    }
-                    if (barcode.contactInfo != null) {
-                      print('Contact Info: ${barcode.contactInfo}');
-                    }
-                    if (barcode.driverLicense != null) {
-                      print('Driver License: ${barcode.driverLicense}');
-                    }
-                    if (barcode.email != null) {
-                      print('Email: ${barcode.email}');
-                    }
-                    if (barcode.geoPoint != null) {
-                      print('Geo Point: ${barcode.geoPoint}');
-                    }
-                    if (barcode.phone != null) {
-                      print('Phone: ${barcode.phone}');
-                    }
-                    if (barcode.sms != null) {
-                      print('SMS: ${barcode.sms}');
-                    }
-                    if (barcode.url != null) {
-                      print('URL: ${barcode.url}');
-                    }
-                    if (barcode.wifi != null) {
-                      print('WiFi: ${barcode.wifi}');
-                    }
-                    
-                    print('====================================');
-                    
-                    setState(() => isScanned = true);
-                    Navigator.pop(context, barcode.rawValue);
+                    final shortValue = barcode.rawValue!.length > 30 
+                        ? '${barcode.rawValue!.substring(0, 30)}...' 
+                        : barcode.rawValue!;
+                    print('Code $shortValue: center (${centerX.toInt()}, ${centerY.toInt()}) - ${isInside ? "✅ INSIDE" : "❌ OUTSIDE"}');
+                  }
+                  
+                  return isInside;
+                }).toList();
+                
+                if (barcodesInScanArea.isEmpty) {
+                  print('⚠️ No codes detected in scan area');
+                  return;
+                }
+                
+                print('✅ ${barcodesInScanArea.length} code(s) in scan area');
+                
+                // Priority 1: Find QR codes first (they usually have URLs and better data)
+                Barcode? qrCode;
+                for (final barcode in barcodesInScanArea) {
+                  if (barcode.rawValue != null && barcode.format == BarcodeFormat.qrCode) {
+                    qrCode = barcode;
+                    print('🎯 QR Code detected in scan area - prioritizing!');
                     break;
                   }
+                }
+                
+                // Priority 2: If no QR code, find the LARGEST barcode in scan area
+                Barcode? largestBarcode;
+                double maxArea = 0;
+                
+                if (qrCode == null) {
+                  for (final barcode in barcodesInScanArea) {
+                    if (barcode.rawValue != null && barcode.size != null) {
+                      final area = barcode.size.width * barcode.size.height;
+                      if (area > maxArea) {
+                        maxArea = area;
+                        largestBarcode = barcode;
+                      }
+                    }
+                  }
+                }
+                
+                // Use QR code if found, otherwise largest barcode, otherwise first valid one
+                final barcodeToUse = qrCode ?? largestBarcode ?? barcodesInScanArea.firstWhere(
+                  (b) => b.rawValue != null,
+                  orElse: () => barcodesInScanArea.first,
+                );
+                
+                if (barcodeToUse.rawValue != null) {
+                  print('========== BARCODE SCANNED ==========');
+                  print('Raw Value: ${barcodeToUse.rawValue}');
+                  print('Display Value: ${barcodeToUse.displayValue}');
+                  print('Format: ${barcodeToUse.format}');
+                  print('Type: ${barcodeToUse.type}');
+                  print('Corners: ${barcodeToUse.corners}');
+                  print('Size: ${barcodeToUse.size}');
+                  if (qrCode != null) {
+                    print('📱 QR Code selected (priority mode)');
+                  } else {
+                    print('📊 Barcode selected: Area $maxArea (largest of ${barcodes.length} detected)');
+                  }
+                  
+                  if (barcodeToUse.calendarEvent != null) {
+                    print('Calendar Event: ${barcodeToUse.calendarEvent}');
+                  }
+                  if (barcodeToUse.contactInfo != null) {
+                    print('Contact Info: ${barcodeToUse.contactInfo}');
+                  }
+                  if (barcodeToUse.driverLicense != null) {
+                    print('Driver License: ${barcodeToUse.driverLicense}');
+                  }
+                  if (barcodeToUse.email != null) {
+                    print('Email: ${barcodeToUse.email}');
+                  }
+                  if (barcodeToUse.geoPoint != null) {
+                    print('Geo Point: ${barcodeToUse.geoPoint}');
+                  }
+                  if (barcodeToUse.phone != null) {
+                    print('Phone: ${barcodeToUse.phone}');
+                  }
+                  if (barcodeToUse.sms != null) {
+                    print('SMS: ${barcodeToUse.sms}');
+                  }
+                  if (barcodeToUse.url != null) {
+                    print('URL: ${barcodeToUse.url}');
+                  }
+                  
+                  print('====================================');
+                  
+                  setState(() => isScanned = true);
+                  Navigator.pop(context, barcodeToUse.rawValue);
                 }
               }
             },
           ),
-          // Scanning overlay
           Center(
             child: Container(
-              width: 250,
-              height: 250,
+              width: 300,
+              height: 300,
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.white, width: 3),
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
           ),
-          // Instructions
           Positioned(
             bottom: 100,
             left: 0,
@@ -2268,10 +2512,11 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
-                'Position the QR code or barcode within the frame',
+                '🎯 QR codes are prioritized!\nPosition the code within the frame',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
                 textAlign: TextAlign.center,
               ),

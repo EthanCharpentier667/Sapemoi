@@ -10,6 +10,7 @@ class NetworkManager {
   final String endpoint = 'https://sapemoi-api.onrender.com/analyze';
   final String totalEndpoint = 'https://sapemoi-api.onrender.com/total';
   final String analyzeWithInfoEndpoint = 'https://sapemoi-api.onrender.com/analyze_with_info';
+  final String analyzeBarcodeProductEndpoint = 'https://sapemoi-api.onrender.com/analyze_barcode_product';
 
   Future<Map<String, dynamic>> estimateWardrobeValue(
     List<Map<String, dynamic>> items, {
@@ -213,6 +214,101 @@ class NetworkManager {
     }
   }
 
+  /// Analyze barcode product automatically with Google Images search
+  /// No user photo needed - API finds product image and analyzes it!
+  Future<AnalysisResult> analyzeBarcodeProduct(
+    String productCode,
+    String productName, {
+    String? brand,
+    Duration timeout = const Duration(minutes: 2),
+  }) async {
+    try {
+      print('🔍 Auto-analyzing product: $productName');
+      if (brand != null) print('   Brand: $brand');
+
+      final payload = {
+        'product_code': productCode,
+        'product_name': productName,
+        if (brand != null) 'brand': brand,
+      };
+      final body = json.encode(payload);
+
+      final response = await http
+          .post(
+            Uri.parse(analyzeBarcodeProductEndpoint),
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(timeout);
+
+      print('📥 Response status: ${response.statusCode}');
+
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
+      }
+
+      final jsonData = json.decode(response.body) as Map<String, dynamic>;
+      print('✅ Auto-analysis complete');
+
+      if (jsonData.containsKey('error')) {
+        throw Exception('API Error: ${jsonData['error']}');
+      }
+
+      final imageUrl = jsonData['image_url'] as String?;
+      String? imageBase64;
+      
+      if (imageUrl != null) {
+        print('🖼️  Found image: $imageUrl');
+        try {
+          final imageResponse = await http.get(Uri.parse(imageUrl)).timeout(
+            const Duration(seconds: 30),
+          );
+          if (imageResponse.statusCode == 200) {
+            imageBase64 = base64Encode(imageResponse.bodyBytes);
+            print('✅ Image downloaded and converted to base64 (${imageBase64.length} chars)');
+          } else {
+            print('⚠️  Failed to download image: ${imageResponse.statusCode}');
+          }
+        } catch (e) {
+          print('⚠️  Image download error: $e');
+        }
+      }
+
+      final choices = jsonData['choices'] as List<dynamic>?;
+      if (choices == null || choices.isEmpty) {
+        throw Exception('Missing "choices" in response');
+      }
+
+      final message = choices.first['message'] as Map<String, dynamic>?;
+      final content = message?['content'] as String?;
+
+      if (content == null) {
+        throw Exception('Missing message or content in choices');
+      }
+
+      final type = _parseType(content);
+      final specificType = _parseSpecificType(content);
+      final colors = _parseColors(content);
+      final parsedBrand = _parseBrand(content);
+      final product = _parseProduct(content);
+
+      print('✅ Parsed - type: $type, specificType: $specificType, colors: ${colors.length}');
+
+      return AnalysisResult(
+        type: type,
+        specificType: specificType,
+        colors: colors,
+        brand: parsedBrand,
+        product: product,
+        imageUrl: imageUrl,
+        imageBase64: imageBase64,
+      );
+    } catch (e) {
+      print('❌ Auto-analysis error: $e');
+      rethrow;
+    }
+  }
+
   String _parseType(String content) {
     return _parseField(content, 'Type') ?? 'unknown';
   }
@@ -272,6 +368,8 @@ class AnalysisResult {
   final List<ColorInfo> colors;
   final String brand;
   final String product;
+  final String? imageUrl;
+  final String? imageBase64;
 
   AnalysisResult({
     required this.type,
@@ -279,5 +377,7 @@ class AnalysisResult {
     required this.colors,
     required this.brand,
     required this.product,
+    this.imageUrl,
+    this.imageBase64,
   });
 }

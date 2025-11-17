@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'scrapers/zara.dart';
 
 class BrandInfo {
   final String? brand;
@@ -125,20 +126,19 @@ class BarcodeScanner {
       
       if (apiResult != null && apiResult.hasEnoughData) {
         print('✅ Product found via API');
-        print('Brand: ${apiResult.brand}');
         print('Product: ${apiResult.productName}');
-        print('⏭️  Will send to AI for color/type analysis');
+        print('⏭️  Will send to AI for brand/color/type analysis');
         print('====================================');
-        // Mark as needing AI analysis for colors/type
+
         return BrandInfo(
-          brand: apiResult.brand,
+          brand: null,
           productCode: apiResult.productCode,
           productName: apiResult.productName,
           category: apiResult.category,
           imageUrl: apiResult.imageUrl,
           description: apiResult.description,
           additionalData: apiResult.additionalData,
-          needsAIAnalysis: true, // Send to AI for color/type
+          needsAIAnalysis: true,
         );
       } else if (brand != null) {
         print('⚠️ API lookup failed, using GS1 brand only');
@@ -180,11 +180,23 @@ class BarcodeScanner {
         // If we have both brand and product code, return immediately
         if (brand != null && productCode != null) {
           print('✅ Brand and product code extracted from URL');
+          
+          // Try to scrape product name for specific brands
+          String? scrapedProductName;
+          if (brand.toLowerCase().contains('zara')) {
+            print('🕷️ Attempting to scrape Zara product name...');
+            scrapedProductName = await ZaraScraper.getProductName(productCode);
+          }
+          
+          final finalProductName = scrapedProductName ?? '$brand $productCode';
+          
+          print('⏭️  Will send to AI for complete analysis');
           print('====================================');
           return BrandInfo(
             brand: brand,
             productCode: productCode,
-            productName: '$brand $productCode',
+            productName: finalProductName,
+            needsAIAnalysis: true,
           );
         }
         
@@ -453,3 +465,4 @@ class BarcodeScanner {
     }
   }
 }
+
