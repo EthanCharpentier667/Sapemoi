@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "136016577830",
+    "project_id": "sapemoi-f5c9e",
+    "storage_bucket": "sapemoi-f5c9e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:136016577830:android:d6497b65842386c1566de7",
+        "android_client_info": {
+          "package_name": "com.example.sapemoi"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "136016577830-mscm6gea5siurgihunor8hmhibkie7ot.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.sapemoi",
+            "certificate_hash": "b871ccc94d4c67f9e14b4277b1743472f9d25c57"
+          }
+        },
+        {
+          "client_id": "136016577830-fs11i2b0c4hkcg7nfa70fn024irejm5i.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAs_sabDrdbUosK_6LLDYqDLaezWMJmKTw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "136016577830-fs11i2b0c4hkcg7nfa70fn024irejm5i.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "136016577830-6si9e2n26ikmfm46lbulvt1dei8a0qhl.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.sapemoi"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
