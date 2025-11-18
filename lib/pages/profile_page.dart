@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
 import 'dart:io';
-import 'auth_manager.dart';
-import 'db_manager.dart';
-import 'network_manager.dart';
-import 'models.dart';
+import '../auth_manager.dart';
+import '../db_manager.dart';
+import '../network_manager.dart';
+import '../models.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});

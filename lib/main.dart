@@ -9,8 +9,10 @@ import 'models.dart';
 import 'db_manager.dart';
 import 'network_manager.dart';
 import 'outfit_generator.dart';
-import 'login_page.dart';
-import 'profile_page.dart';
+import 'pages/login_page.dart';
+import 'pages/profile_page.dart';
+import 'pages/recommendations_page.dart';
+import 'pages/wardrobe_page.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -109,15 +111,25 @@ class _ContentViewState extends State<ContentView> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         body: Stack(
           children: [
             TabBarView(
               children: [
-                _buildWardrobeTab(),
+                WardrobePage(
+                  clothes: clothes,
+                  searchText: searchText,
+                  onSearchChanged: (value) => setState(() => searchText = value),
+                  onAddPressed: () => setState(() => showAddModal = true),
+                  onClothingTap: (clothing) => setState(() => selectedClothing = clothing),
+                ),
                 _buildOutfitsTab(),
                 _buildCreateOutfitTab(),
+                RecommendationsPage(
+                  clothes: clothes,
+                  onUpdate: _loadClothes,
+                ),
                 const ProfilePage(),
               ],
             ),
@@ -130,144 +142,11 @@ class _ContentViewState extends State<ContentView> {
             Tab(icon: Icon(Icons.checkroom), text: 'Wardrobe'),
             Tab(icon: Icon(Icons.style), text: 'Outfits'),
             Tab(icon: Icon(Icons.videogame_asset), text: 'Create'),
+            Tab(icon: Icon(Icons.star), text: 'Shop'),
             Tab(icon: Icon(Icons.person), text: 'Profile'),
           ],
         ),
       ),
-    );
-  }
-
-  // MARK: - Wardrobe Tab
-  Widget _buildWardrobeTab() {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            Container(
-              color: Colors.white,
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      const Text(
-                        'Sapemoi',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.add_circle, size: 32),
-                        onPressed: () => setState(() => showAddModal = true),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    decoration: InputDecoration(
-                      hintText: 'Search clothing...',
-                      prefixIcon: const Icon(Icons.search),
-                      filled: true,
-                      fillColor: const Color(0xFFF5F5F5),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                    onChanged: (value) => setState(() => searchText = value),
-                  ),
-                ],
-              ),
-            ),
-            // Grid
-            Expanded(
-              child: _buildClothesGrid(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildClothesGrid() {
-    final filtered = searchText.isEmpty
-        ? clothes
-        : clothes.where((c) {
-            final query = searchText.toLowerCase();
-            return c.name.toLowerCase().contains(query) ||
-                   c.type.toLowerCase().contains(query) ||
-                   c.brand.toLowerCase().contains(query) ||
-                   c.productName.toLowerCase().contains(query);
-          }).toList();
-
-    if (filtered.isEmpty) {
-      return const Center(
-        child: Text('No clothing items found'),
-      );
-    }
-
-    final grouped = <String, List<Clothing>>{};
-    for (final item in filtered) {
-      grouped.putIfAbsent(item.type, () => []).add(item);
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: grouped.keys.length,
-      itemBuilder: (context, index) {
-        final type = grouped.keys.elementAt(index);
-        final items = grouped[type]!;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              child: Row(
-                children: [
-                  Text(
-                    type.toUpperCase(),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${items.length} item${items.length != 1 ? 's' : ''}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(8),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 0.75,
-              ),
-              itemCount: items.length,
-              itemBuilder: (context, i) {
-                return ClothingCard(
-                  clothing: items[i],
-                  onTap: () => setState(() => selectedClothing = items[i]),
-                );
-              },
-            ),
-          ],
-        );
-      },
     );
   }
 
@@ -1927,91 +1806,6 @@ class _ClothingDetailModalState extends State<ClothingDetailModal> {
             child: Text(value),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// MARK: - Clothing Card
-class ClothingCard extends StatelessWidget {
-  final Clothing clothing;
-  final VoidCallback onTap;
-
-  const ClothingCard({
-    super.key,
-    required this.clothing,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 3,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                child: clothing.imageBase64 != null
-                    ? Image.memory(
-                        base64Decode(clothing.imageBase64!),
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                      )
-                    : Image.file(
-                        File(clothing.imagePath),
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        errorBuilder: (context, error, stack) {
-                          return Container(
-                            color: Colors.grey[300],
-                            child: const Icon(Icons.broken_image, size: 48),
-                          );
-                        },
-                      ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    clothing.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    clothing.brand,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

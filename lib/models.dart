@@ -122,3 +122,141 @@ class ColorClash {
     required this.score,
   });
 }
+
+class StyleProfile {
+  final String styleType;
+  final Map<String, int> brandPreferences;
+  final Map<String, int> typePreferences;
+  final Map<String, int> colorPreferences;
+  final List<String> topBrands;
+  final List<String> topTypes;
+  final List<ColorInfo> topColors;
+
+  StyleProfile({
+    this.styleType = 'casual',
+    required this.brandPreferences,
+    required this.typePreferences,
+    required this.colorPreferences,
+    required this.topBrands,
+    required this.topTypes,
+    required this.topColors,
+  });
+
+  factory StyleProfile.fromClothes(List<Clothing> clothes) {
+    final brandMap = <String, int>{};
+    final typeMap = <String, int>{};
+    final colorMap = <String, int>{};
+
+    for (final item in clothes) {
+      // Count brands weighted by wear count
+      final brand = item.brand.toLowerCase();
+      if (brand != 'unknown') {
+        brandMap[brand] = (brandMap[brand] ?? 0) + (item.wearCount > 0 ? item.wearCount : 1);
+      }
+
+      // Count specific types weighted by wear count
+      final type = item.specificType.toLowerCase();
+      if (type != 'unknown') {
+        typeMap[type] = (typeMap[type] ?? 0) + (item.wearCount > 0 ? item.wearCount : 1);
+      }
+
+      // Count dominant colors
+      for (final color in item.colors) {
+        if (color.pct >= 30) { // Only significant colors
+          final key = '${color.r},${color.g},${color.b}';
+          final weight = (color.pct / 100.0 * (item.wearCount > 0 ? item.wearCount : 1)).round();
+          colorMap[key] = (colorMap[key] ?? 0) + weight;
+        }
+      }
+    }
+
+    // Sort and get top 3 brands
+    final sortedBrands = brandMap.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final topBrands = sortedBrands.take(3).map((e) => e.key).toList();
+
+    // Sort and get top 3 types
+    final sortedTypes = typeMap.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final topTypes = sortedTypes.take(3).map((e) => e.key).toList();
+
+    // Sort and get top 5 colors
+    final sortedColors = colorMap.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final topColors = sortedColors.take(5).map((e) {
+      final parts = e.key.split(',');
+      return ColorInfo(
+        r: int.parse(parts[0]),
+        g: int.parse(parts[1]),
+        b: int.parse(parts[2]),
+        pct: 100,
+      );
+    }).toList();
+
+    String detectStyle() {
+      final allBrands = topBrands.map((b) => b.toLowerCase()).join(' ');
+      final allTypes = topTypes.map((t) => t.toLowerCase()).join(' ');
+      
+      if (allBrands.contains('nike') || allBrands.contains('jordan') || 
+          allBrands.contains('supreme') || allTypes.contains('sneakers') || 
+          allTypes.contains('hoodie') || allTypes.contains('jersey')) {
+        return 'streetwear';
+      }
+      
+      if (allBrands.contains('gucci') || allBrands.contains('prada') || 
+          allBrands.contains('louis vuitton')) {
+        return 'luxury';
+      }
+      
+      return 'casual';
+    }
+
+    return StyleProfile(
+      styleType: detectStyle(),
+      brandPreferences: brandMap,
+      typePreferences: typeMap,
+      colorPreferences: colorMap,
+      topBrands: topBrands,
+      topTypes: topTypes,
+      topColors: topColors,
+    );
+  }
+}
+
+class MissingPieceRecommendation {
+  final String type;
+  final String specificType;
+  final List<String> suggestedBrands;
+  final ColorInfo targetColor;
+  final List<Clothing> existingOutfit;
+  final double currentScore;
+  final double potentialScore;
+  final String reason;
+  final List<String> searchKeywords;
+
+  MissingPieceRecommendation({
+    required this.type,
+    required this.specificType,
+    required this.suggestedBrands,
+    required this.targetColor,
+    required this.existingOutfit,
+    required this.currentScore,
+    required this.potentialScore,
+    required this.reason,
+    required this.searchKeywords,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'type': type,
+      'specificType': specificType,
+      'suggestedBrands': suggestedBrands.join(','),
+      'targetColor': '${targetColor.r},${targetColor.g},${targetColor.b}',
+      'outfitIds': existingOutfit.map((c) => c.id).join(','),
+      'currentScore': currentScore,
+      'potentialScore': potentialScore,
+      'reason': reason,
+      'searchKeywords': searchKeywords.join(','),
+    };
+  }
+}

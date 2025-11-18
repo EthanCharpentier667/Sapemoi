@@ -36,6 +36,34 @@ HSL rgbToHsl(double r, double g, double b) {
   return HSL(h: h * 360, s: s, l: l);
 }
 
+(double, double, double) hslToRgb(double h, double s, double l) {
+  final hNorm = h / 360.0;
+  
+  double r, g, b;
+
+  if (s == 0) {
+    r = g = b = l; // Achromatic
+  } else {
+    double hue2rgb(double p, double q, double t) {
+      var tNorm = t;
+      if (tNorm < 0) tNorm += 1;
+      if (tNorm > 1) tNorm -= 1;
+      if (tNorm < 1 / 6) return p + (q - p) * 6 * tNorm;
+      if (tNorm < 1 / 2) return q;
+      if (tNorm < 2 / 3) return p + (q - p) * (2 / 3 - tNorm) * 6;
+      return p;
+    }
+
+    final q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    final p = 2 * l - q;
+    r = hue2rgb(p, q, hNorm + 1 / 3);
+    g = hue2rgb(p, q, hNorm);
+    b = hue2rgb(p, q, hNorm - 1 / 3);
+  }
+
+  return (r, g, b);
+}
+
 bool isNeutral(double r, double g, double b) {
   const tol = 0.08;
   
