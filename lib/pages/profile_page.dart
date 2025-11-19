@@ -155,16 +155,20 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         const Icon(Icons.attach_money, color: Colors.green, size: 32),
                         const SizedBox(width: 12),
-                        const Text(
-                          'Wardrobe Value',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                        Expanded(
+                          child: Text(
+                            'Wardrobe Value',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                        const Spacer(),
+                        const SizedBox(width: 8),
                         ElevatedButton(
                           onPressed: _loadingValue ? null : _estimateWardrobeValue,
+                          style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
                           child: _loadingValue
                               ? const SizedBox(
                                   width: 20,

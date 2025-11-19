@@ -4,7 +4,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:io';
 import 'dart:convert';
-import 'dart:math';
 import 'models.dart';
 import 'db_manager.dart';
 import 'network_manager.dart';
@@ -13,6 +12,7 @@ import 'pages/login_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/recommendations_page.dart';
 import 'pages/wardrobe_page.dart';
+import 'pages/create_outfit_page.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -125,7 +125,10 @@ class _ContentViewState extends State<ContentView> {
                   onClothingTap: (clothing) => setState(() => selectedClothing = clothing),
                 ),
                 _buildOutfitsTab(),
-                _buildCreateOutfitTab(),
+                CreateOutfitPage(
+                  clothes: clothes,
+                  onUpdate: _loadClothes,
+                ),
                 RecommendationsPage(
                   clothes: clothes,
                   onUpdate: _loadClothes,
@@ -171,7 +174,6 @@ class _ContentViewState extends State<ContentView> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Liste des types disponibles avec checkbox
                 if (selectedTypes.isEmpty)
                   const Text('Add some clothes to generate outfits!')
                 else
@@ -645,6 +647,14 @@ class _ContentViewState extends State<ContentView> {
     }
   }
 
+  MaterialColor _getRatingColor(int compatibility) {
+    if (compatibility >= 85) return Colors.purple;
+    if (compatibility >= 70) return Colors.green;
+    if (compatibility >= 55) return Colors.blue;
+    if (compatibility >= 40) return Colors.orange;
+    return Colors.red;
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
     final image = await picker.pickImage(source: source);
@@ -774,625 +784,6 @@ class _ContentViewState extends State<ContentView> {
     );
   }
   
-  String? selectedSlotType;
-  
-  // MARK: - Create Outfit Tab
-  Widget _buildCreateOutfitTab() {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Your Outfit'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.auto_awesome),
-            tooltip: 'Generate Best Outfit',
-            onPressed: _generateBestOutfit,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              setState(() {
-                outfitSlots = {
-                  'headwear': null,
-                  'outerwear': null,
-                  'top': null,
-                  'bottom': null,
-                  'footwear': null,
-                  'accessory': null,
-                };
-                customOutfitScore = null;
-                selectedSlotType = null;
-              });
-            },
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: 350,
-                    height: 550,
-                    child: _buildCharacterWithSlots(),
-                  ),
-                  const SizedBox(height: 24),
-                  if (customOutfitScore != null)
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 20),
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            _getCompatibilityColor((100 - customOutfitScore!.score).toInt()).shade50,
-                            _getCompatibilityColor((100 - customOutfitScore!.score).toInt()).shade100,
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _getCompatibilityColor((100 - customOutfitScore!.score).toInt()).withOpacity(0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.stars,
-                                color: _getCompatibilityColor((100 - customOutfitScore!.score).toInt()),
-                                size: 32,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                '${(100 - customOutfitScore!.score).toInt()}% Compatibility',
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: _getCompatibilityColor((100 - customOutfitScore!.score).toInt()),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            onPressed: () async {
-                              final user = FirebaseAuth.instance.currentUser;
-                              if (user != null) {
-                                final items = outfitSlots.values.where((item) => item != null).cast<Clothing>().toList();
-                                final ids = items.map((c) => c.id).toList();
-                                await DBManager().markOutfitAsUsed(ids, user.uid);
-                                await _loadClothes();
-                                
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Outfit marked as worn!')),
-                                  );
-                                }
-                              }
-                            },
-                            icon: const Icon(Icons.check_circle),
-                            label: const Text('Mark as Worn'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _getCompatibilityColor((100 - customOutfitScore!.score).toInt()),
-                              foregroundColor: Colors.white,
-                              minimumSize: const Size.fromHeight(48),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 20),
-                ],
-              ),
-            ),
-          ),
-          if (selectedSlotType != null) _buildInventoryDrawer(),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildCharacterWithSlots() {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Positioned(
-          top: 0,
-          left: 125,
-          child: _buildSlotButton('headwear', Icons.sports_baseball, 'Hat'),
-        ),
-        
-        Positioned(
-          top: 90,
-          left: 10,
-          child: _buildSlotButton('accessory', Icons.watch, 'Accessory'),
-        ),
-        
-        Positioned(
-          top: 90,
-          right: 10,
-          child: _buildSlotButton('outerwear', Icons.checkroom, 'Jacket'),
-        ),
-        
-        Positioned(
-          top: 200,
-          left: 125,
-          child: _buildSlotButton('top', Icons.dry_cleaning, 'Top'),
-        ),
-        
-        Positioned(
-          top: 320,
-          left: 125,
-          child: _buildSlotButton('bottom', Icons.wallet, 'Bottom'),
-        ),
-        
-        Positioned(
-          top: 450,
-          left: 125,
-          child: _buildSlotButton('footwear', Icons.shopping_bag, 'Shoes'),
-        ),
-      ],
-    );
-  }
-  
-  Widget _buildSlotButton(String type, IconData icon, String label) {
-    final item = outfitSlots[type];
-    final isSelected = selectedSlotType == type;
-    final isDisabled = disabledSlots.contains(type);
-    final isOptional = type == 'headwear' || type == 'accessory' || type == 'outerwear';
-    
-    return GestureDetector(
-      onTap: isDisabled ? null : () {
-        setState(() {
-          selectedSlotType = isSelected ? null : type;
-        });
-      },
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              color: isDisabled ? Colors.grey[300] : (isSelected ? Colors.purple[100] : Colors.white),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isDisabled ? Colors.grey : (isSelected ? Colors.purple : Colors.grey[300]!),
-                width: 3,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: item == null || isDisabled
-                ? Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(icon, size: 40, color: isDisabled ? Colors.grey[500] : Colors.grey[400]),
-                      const SizedBox(height: 4),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: isDisabled ? Colors.grey[500] : Colors.grey[600],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  )
-                : Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: item.imageBase64 != null
-                            ? Image.memory(
-                                base64Decode(item.imageBase64!),
-                                fit: BoxFit.cover,
-                                width: 100,
-                                height: 100,
-                              )
-                            : Image.file(
-                                File(item.imagePath),
-                                fit: BoxFit.cover,
-                                width: 100,
-                                height: 100,
-                              ),
-                      ),
-                      Positioned(
-                        top: 2,
-                        right: 2,
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              outfitSlots[type] = null;
-                              _evaluateCustomOutfit();
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.close,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-          if (isOptional)
-            Positioned(
-              top: -8,
-              left: -8,
-              child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    if (isDisabled) {
-                      disabledSlots.remove(type);
-                    } else {
-                      disabledSlots.add(type);
-                      outfitSlots[type] = null;
-                    }
-                    _evaluateCustomOutfit();
-                  });
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: isDisabled ? Colors.grey : Colors.blue,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    isDisabled ? Icons.toggle_off : Icons.toggle_on,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildInventoryDrawer() {
-    final itemsForType = clothes.where((c) => c.type.toLowerCase() == selectedSlotType!.toLowerCase()).toList();
-    
-    return GestureDetector(
-      onTap: () => setState(() => selectedSlotType = null),
-      child: Container(
-        color: Colors.black54,
-        child: Center(
-          child: GestureDetector(
-            onTap: () {},
-            child: Container(
-              width: MediaQuery.of(context).size.width * 0.95,
-              height: MediaQuery.of(context).size.height * 0.8,
-              margin: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.purple[50],
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _getIconForType(selectedSlotType!),
-                          size: 32,
-                          color: Colors.purple,
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          _getLabelForType(selectedSlotType!),
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => setState(() => selectedSlotType = null),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: itemsForType.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.inventory_2_outlined,
-                                  size: 64,
-                                  color: Colors.grey[400],
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No ${_getLabelForType(selectedSlotType!).toLowerCase()} in your wardrobe',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : GridView.builder(
-                            padding: const EdgeInsets.all(16),
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 3,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              childAspectRatio: 1.0,
-                            ),
-                            itemCount: itemsForType.length,
-                            itemBuilder: (context, index) {
-                              final item = itemsForType[index];
-                              final isEquipped = outfitSlots[selectedSlotType] == item;
-                              
-                              return GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    outfitSlots[selectedSlotType!] = item;
-                                    _evaluateCustomOutfit();
-                                    selectedSlotType = null;
-                                  });
-                                },
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                      color: isEquipped ? Colors.purple : Colors.grey[300]!,
-                                      width: isEquipped ? 4 : 2,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.1),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Stack(
-                                    children: [
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(14),
-                                        child: item.imageBase64 != null
-                                            ? Image.memory(
-                                                base64Decode(item.imageBase64!),
-                                                fit: BoxFit.cover,
-                                                width: double.infinity,
-                                                height: double.infinity,
-                                              )
-                                            : Image.file(
-                                                File(item.imagePath),
-                                                fit: BoxFit.cover,
-                                                width: double.infinity,
-                                                height: double.infinity,
-                                              ),
-                                      ),
-                                      if (isEquipped)
-                                        Positioned(
-                                          top: 8,
-                                          right: 8,
-                                          child: Container(
-                                            padding: const EdgeInsets.all(8),
-                                            decoration: BoxDecoration(
-                                              color: Colors.purple,
-                                              shape: BoxShape.circle,
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: Colors.purple.withOpacity(0.5),
-                                                  blurRadius: 8,
-                                                  offset: const Offset(0, 2),
-                                                ),
-                                              ],
-                                            ),
-                                            child: const Icon(
-                                              Icons.check,
-                                              size: 24,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-  
-  IconData _getIconForType(String type) {
-    switch (type.toLowerCase()) {
-      case 'headwear': return Icons.sports_baseball;
-      case 'outerwear': return Icons.checkroom;
-      case 'top': return Icons.dry_cleaning;
-      case 'bottom': return Icons.wallet;
-      case 'footwear': return Icons.shopping_bag;
-      case 'accessory': return Icons.watch;
-      default: return Icons.category;
-    }
-  }
-  
-  String _getLabelForType(String type) {
-    switch (type.toLowerCase()) {
-      case 'headwear': return 'Headwear';
-      case 'outerwear': return 'Jackets & Coats';
-      case 'top': return 'Tops';
-      case 'bottom': return 'Bottoms';
-      case 'footwear': return 'Footwear';
-      case 'accessory': return 'Accessories';
-      default: return type;
-    }
-  }
-  
-  void _evaluateCustomOutfit() {
-    final items = outfitSlots.values.where((item) => item != null).cast<Clothing>().toList();
-    
-    if (items.isEmpty) {
-      customOutfitScore = null;
-      return;
-    }
-    
-    customOutfitScore = OutfitGenerator.evaluateOutfitWithWeights(items, boldMode: boldMode);
-  }
-  
-  void _generateBestOutfit() {
-    final byType = <String, List<Clothing>>{};
-    for (final item in clothes) {
-      byType.putIfAbsent(item.type.toLowerCase(), () => []).add(item);
-    }
-    
-    final preFilledItems = outfitSlots.entries
-        .where((entry) => entry.value != null && !disabledSlots.contains(entry.key))
-        .map((entry) => entry.value!)
-        .toList();
-    
-    final emptySlots = outfitSlots.keys
-        .where((type) => outfitSlots[type] == null && !disabledSlots.contains(type))
-        .toList();
-    
-    if (emptySlots.isEmpty && preFilledItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All slots are disabled or filled!')),
-      );
-      return;
-    }
-    
-    final requiredTypes = ['top', 'bottom', 'footwear'];
-    for (final type in requiredTypes) {
-      final hasPrefilled = preFilledItems.any((item) => item.type.toLowerCase() == type);
-      if (!hasPrefilled && (!byType.containsKey(type) || byType[type]!.isEmpty)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Not enough items to generate outfit (missing $type)')),
-        );
-        return;
-      }
-    }
-    
-    final attempts = 100;
-    final goodOutfits = <List<Clothing>>[];
-    final random = Random();
-    
-    for (var i = 0; i < attempts; i++) {
-      final outfit = List<Clothing>.from(preFilledItems);
-      
-      for (final type in emptySlots) {
-        final normalizedType = type.toLowerCase();
-        if (byType.containsKey(normalizedType) && byType[normalizedType]!.isNotEmpty) {
-          final items = byType[normalizedType]!;
-          final randomItem = items[random.nextInt(items.length)];
-          outfit.add(randomItem);
-        }
-      }
-      
-      if (outfit.isEmpty) continue;
-      
-      final result = OutfitGenerator.evaluateOutfitWithWeights(outfit, boldMode: boldMode);
-      
-      if (result.score <= 50) {
-        goodOutfits.add(outfit);
-      }
-    }
-    
-    if (goodOutfits.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No good outfit found, try adding more items!')),
-      );
-      return;
-    }
-    
-    final selectedIndex = random.nextInt(goodOutfits.length);
-    final bestOutfit = goodOutfits[selectedIndex];
-    
-    setState(() {
-      for (final item in bestOutfit) {
-        final slotType = item.type.toLowerCase();
-        if (outfitSlots.containsKey(slotType) && 
-            !disabledSlots.contains(slotType) && 
-            outfitSlots[slotType] == null) {
-          outfitSlots[slotType] = item;
-        }
-      }
-      _evaluateCustomOutfit();
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Best outfit generated!')),
-    );
-  }
-  
-  MaterialColor _getRatingColor(int compatibility) {
-    if (compatibility >= 85) return Colors.purple;
-    if (compatibility >= 70) return Colors.green;
-    if (compatibility >= 55) return Colors.blue;
-    if (compatibility >= 40) return Colors.orange;
-    return Colors.red;
-  }
-  
-  MaterialColor _getCompatibilityColor(int compatibility) {
-    if (compatibility >= 90) return Colors.green;
-    if (compatibility >= 75) return Colors.lightGreen;
-    if (compatibility >= 60) return Colors.lime;
-    if (compatibility >= 45) return Colors.orange;
-    if (compatibility >= 30) return Colors.deepOrange;
-    return Colors.red;
-  }
 }
 
 class OutfitWithResult {
@@ -1423,6 +814,8 @@ class ClothingDetailModal extends StatefulWidget {
 class _ClothingDetailModalState extends State<ClothingDetailModal> {
   late TextEditingController _brandController;
   late TextEditingController _productController;
+  bool _isEditingType = false;
+  String _selectedType = '';
   bool _isEditingBrand = false;
   bool _isEditingProduct = false;
   bool _isEditingColors = false;
@@ -1434,6 +827,7 @@ class _ClothingDetailModalState extends State<ClothingDetailModal> {
     _brandController = TextEditingController(text: widget.clothing.brand);
     _productController = TextEditingController(text: widget.clothing.productName);
     _editableColors = List.from(widget.clothing.colors);
+    _selectedType = widget.clothing.type;
   }
 
   @override
@@ -1485,6 +879,28 @@ class _ClothingDetailModalState extends State<ClothingDetailModal> {
     await DBManager().updateClothing(updated);
     widget.onUpdate();
     setState(() => _isEditingProduct = false);
+  }
+
+  Future<void> _saveType() async {
+    final updated = Clothing(
+      id: widget.clothing.id,
+      name: widget.clothing.name,
+      imagePath: widget.clothing.imagePath,
+      imageBase64: widget.clothing.imageBase64,
+      type: _selectedType,
+      specificType: widget.clothing.specificType,
+      colors: widget.clothing.colors,
+      brand: widget.clothing.brand,
+      productName: widget.clothing.productName,
+      createdAt: widget.clothing.createdAt,
+      wearCount: widget.clothing.wearCount,
+      lastWorn: widget.clothing.lastWorn,
+      estimatedValue: widget.clothing.estimatedValue,
+    );
+
+    await DBManager().updateClothing(updated);
+    widget.onUpdate();
+    setState(() => _isEditingType = false);
   }
   
   Future<void> _saveColors() async {
@@ -1572,7 +988,51 @@ class _ClothingDetailModalState extends State<ClothingDetailModal> {
                   ),
                 const SizedBox(height: 16),
                 _buildInfoRow('Name', widget.clothing.name),
-                _buildInfoRow('Type', widget.clothing.type),
+                // Editable Type with dropdown
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      const Text(
+                        'Type:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _isEditingType
+                            ? DropdownButtonFormField<String>(
+                                value: _selectedType,
+                                items: [
+                                  'top',
+                                  'sweater',
+                                  'outerwear',
+                                  'bottom',
+                                  'footwear',
+                                  'headwear',
+                                  'accessory',
+                                  'dress',
+                                  'underwear',
+                                ].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                                onChanged: (v) {
+                                  if (v != null) setState(() => _selectedType = v);
+                                },
+                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+                              )
+                            : Text(_selectedType),
+                      ),
+                      IconButton(
+                        icon: Icon(_isEditingType ? Icons.check : Icons.edit, size: 20),
+                        onPressed: () {
+                          if (_isEditingType) {
+                            _saveType();
+                          } else {
+                            setState(() => _isEditingType = true);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
                 
                 // Editable Brand
                 Padding(

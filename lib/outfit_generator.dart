@@ -6,6 +6,7 @@ class OutfitGenerator {
     'headwear': {'headwear'},
     'dress': {'top', 'bottom', 'dress'},
     'top': {'dress'},
+    'sweater': {'dress'},
     'bottom': {'dress'},
     'footwear': {'footwear'},
   };
