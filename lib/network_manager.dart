@@ -9,8 +9,10 @@ class NetworkManager {
 
   final String endpoint = 'https://sapemoi-api.onrender.com/analyze';
   final String totalEndpoint = 'https://sapemoi-api.onrender.com/total';
-  final String styleEndpoint = 'https://sapemoi-api.onrender.com/analyse_user_style';
-  final String recommendEndpoint = 'https://sapemoi-api.onrender.com/recomands_clothing_items';
+  final String styleEndpoint =
+      'https://sapemoi-api.onrender.com/analyse_user_style';
+  final String recommendEndpoint =
+      'https://sapemoi-api.onrender.com/recomands_clothing_items';
 
   Future<Map<String, dynamic>> estimateWardrobeValue(
     List<Map<String, dynamic>> items, {
@@ -19,12 +21,18 @@ class NetworkManager {
     try {
       print('🔄 Estimating wardrobe value for ${items.length} items');
 
-      final payload = {'items': items.map((item) => {
-        'brand': item['brand'],
-        'product': item['product'],
-        'type': item['type'],
-        'specificType': item['specificType'],
-      }).toList()};
+      final payload = {
+        'items': items
+            .map(
+              (item) => {
+                'brand': item['brand'],
+                'product': item['product'],
+                'type': item['type'],
+                'specificType': item['specificType'],
+              },
+            )
+            .toList(),
+      };
       final body = json.encode(payload);
 
       final response = await http
@@ -42,23 +50,20 @@ class NetworkManager {
       }
 
       final jsonData = json.decode(response.body) as Map<String, dynamic>;
-      
+
       if (jsonData.containsKey('error')) {
         throw Exception('API Error: ${jsonData['error']}');
       }
 
       final total = jsonData['total'] as num?;
       final breakdown = jsonData['breakdown'] as List<dynamic>?;
-      
+
       if (total == null) {
         throw Exception('Missing total in response');
       }
 
       print('✅ Wardrobe value estimated: \$$total');
-      return {
-        'total': total.toDouble(),
-        'breakdown': breakdown ?? [],
-      };
+      return {'total': total.toDouble(), 'breakdown': breakdown ?? []};
     } catch (e) {
       print('❌ Network error: $e');
       rethrow;
@@ -72,13 +77,19 @@ class NetworkManager {
     try {
       print('🔄 Estimating user style for ${items.length} items');
 
+      final itemsArray = items
+          .map(
+            (item) => {
+              'brand': item['brand'],
+              'product': item['product'],
+              'type': item['type'],
+              'specificType': item['specificType'],
+            },
+          )
+          .toList();
+
       final payload = {
-        'itemsList': items.map((item) => {
-          'brand': item['brand'],
-          'product': item['product'],
-          'type': item['type'],
-          'specificType': item['specificType'],
-        }).toList()
+        'itemsList': json.encode(itemsArray),
       };
 
       final body = json.encode(payload);
@@ -118,16 +129,20 @@ class NetworkManager {
 
   Future<List<Map<String, dynamic>>> recommendClothingItems(
     String userStyle,
-    String criteria, {
+    dynamic criteria, {
     Duration timeout = const Duration(minutes: 2),
   }) async {
     try {
       print('🔄 Requesting clothing recommendations for style="$userStyle" criteria="$criteria"');
 
-      final payload = {
-        'userStyle': userStyle,
-        'criterias': criteria,
-      };
+      final dynamic payloadCriteria;
+      if (criteria is String) {
+        payloadCriteria = criteria;
+      } else {
+        payloadCriteria = criteria;
+      }
+
+      final payload = {'userStyle': userStyle, 'criteria': payloadCriteria};
 
       final body = json.encode(payload);
 
@@ -158,17 +173,23 @@ class NetworkManager {
       }
 
       if (jsonData is List) {
-        return List<Map<String, dynamic>>.from(jsonData.map((e) => Map<String, dynamic>.from(e)));
+        return List<Map<String, dynamic>>.from(
+          jsonData.map((e) => Map<String, dynamic>.from(e)),
+        );
       }
 
       try {
         final parsed = json.decode(response.body);
         if (parsed is List) {
-          return List<Map<String, dynamic>>.from(parsed.map((e) => Map<String, dynamic>.from(e)));
+          return List<Map<String, dynamic>>.from(
+            parsed.map((e) => Map<String, dynamic>.from(e)),
+          );
         }
       } catch (_) {}
 
-      return [ {'raw': response.body} ];
+      return [
+        {'raw': response.body},
+      ];
     } catch (e) {
       print('❌ Network error while requesting recommendations: $e');
       rethrow;
@@ -210,7 +231,9 @@ class NetworkManager {
       if (jsonData.containsKey('error')) {
         final isClothing = jsonData['isClothing'] as bool? ?? true;
         if (!isClothing) {
-          throw Exception('Not a clothing item. Please upload an image of clothing, footwear, or fashion accessories.');
+          throw Exception(
+            'Not a clothing item. Please upload an image of clothing, footwear, or fashion accessories.',
+          );
         }
         throw Exception('API Error: ${jsonData['error']}');
       }
@@ -237,7 +260,9 @@ class NetworkManager {
       final brand = _parseBrand(content);
       final product = _parseProduct(content);
 
-      print('✅ Parsed - type: $type, specificType: $specificType, colors: ${colors.length}, brand: $brand, product: $product');
+      print(
+        '✅ Parsed - type: $type, specificType: $specificType, colors: ${colors.length}, brand: $brand, product: $product',
+      );
 
       return AnalysisResult(
         type: type,
@@ -277,9 +302,11 @@ class NetworkManager {
         final cleaned = e.trim();
         return int.tryParse(cleaned) ?? -1;
       }).toList();
-      
+
       if (values.length == 4 && !values.contains(-1)) {
-        colors.add(ColorInfo(r: values[0], g: values[1], b: values[2], pct: values[3]));
+        colors.add(
+          ColorInfo(r: values[0], g: values[1], b: values[2], pct: values[3]),
+        );
       }
     }
 

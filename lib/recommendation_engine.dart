@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 import 'models.dart';
 import 'outfit_generator.dart';
@@ -65,27 +66,42 @@ class RecommendationEngine {
       
       if (targetColor == null) continue;
 
-      
-      final specificType = _suggestSpecificType(missingType, userStyle);
-
       List<Map<String, dynamic>> remoteItems = [];
       try {
-        final criteriaString = 'missingType:$missingType';
-        remoteItems = await NetworkManager().recommendClothingItems(userStyle.styleType, criteriaString);
+            final Map<String, dynamic> criteria = {
+              'missingType': missingType,
+            };
+
+            criteria['colors'] = [
+              {
+                'r': targetColor.r,
+                'g': targetColor.g,
+                'b': targetColor.b,
+                'pct': targetColor.pct,
+              }
+            ];
+
+          final itemsArray = allClothes
+              .where((c) => c.type.toLowerCase() == missingType.toLowerCase())
+              .map((item) => {
+                    'brand': item.brand,
+                    'product': item.productName,
+                    'type': item.type,
+                  })
+              .toList();
+
+          criteria['User_${missingType.toLowerCase() }s'] = json.encode(itemsArray);
+
+        remoteItems = await NetworkManager().recommendClothingItems(userStyle.styleType, criteria);
       } catch (e) {
         remoteItems = [];
       }
 
-      List<String> suggestedBrands = _suggestBrands(missingType, userStyle);
       String reason = 'Recommended based on your style';
-      List<String> keywords = _generateSearchKeywords(missingType, specificType, targetColor, suggestedBrands);
       double potentialScore = min(98.0, currentScore + 15 + random.nextDouble() * 10);
 
       if (remoteItems.isNotEmpty) {
         final first = remoteItems.first;
-        if (first['brand'] != null) {
-          suggestedBrands = [ (first['brand'] as String).toLowerCase() ];
-        }
         if (first['colors'] != null) {
           final colorField = first['colors'] as String;
           final firstColor = colorField.split(';').first.trim();
@@ -94,14 +110,14 @@ class RecommendationEngine {
             final remoteColor = ColorInfo(r: vals[0], g: vals[1], b: vals[2], pct: 100);
             final recommendation = MissingPieceRecommendation(
               type: missingType,
-              specificType: first['specificType'] ?? specificType,
-              suggestedBrands: suggestedBrands,
+              specificType: first['specificType'],
+              suggestedBrands: first['brand'],
               targetColor: remoteColor,
               existingOutfit: fullOutfit,
               currentScore: currentScore,
               potentialScore: potentialScore,
               reason: first['reason'] ?? reason,
-              searchKeywords: keywords,
+              searchKeywords: [],
             );
 
             final isDuplicate = recommendations.any((r) =>
@@ -116,14 +132,14 @@ class RecommendationEngine {
         }
         final recommendation = MissingPieceRecommendation(
           type: missingType,
-          specificType: remoteItems.first['specificType'] ?? specificType,
-          suggestedBrands: suggestedBrands,
+          specificType: remoteItems.first['specificType'],
+          suggestedBrands: remoteItems.first['brand'],
           targetColor: targetColor,
           existingOutfit: fullOutfit,
           currentScore: currentScore,
           potentialScore: potentialScore,
           reason: remoteItems.first['reason'] ?? reason,
-          searchKeywords: keywords,
+          searchKeywords: [],
         );
 
         final isDuplicate = recommendations.any((r) =>
@@ -135,39 +151,7 @@ class RecommendationEngine {
         if (!isDuplicate) recommendations.add(recommendation);
         continue;
       }
-
-      final suggestedBrandsLocal = _suggestBrands(missingType, userStyle);
-      final reasonLocal = 'Recommended based on your style';
-      final keywordsLocal = _generateSearchKeywords(missingType, specificType, targetColor, suggestedBrandsLocal);
-      final potentialScoreLocal = min(98.0, currentScore + 15 + random.nextDouble() * 10);
-
-      final recommendation = MissingPieceRecommendation(
-        type: missingType,
-        specificType: specificType,
-        suggestedBrands: suggestedBrandsLocal,
-        targetColor: targetColor,
-        existingOutfit: fullOutfit,
-        currentScore: currentScore,
-        potentialScore: potentialScoreLocal,
-        reason: reasonLocal,
-        searchKeywords: keywordsLocal,
-      );
-
-      
-      final isDuplicate = recommendations.any((r) => 
-        r.type == recommendation.type &&
-        r.targetColor.r == recommendation.targetColor.r &&
-        r.targetColor.g == recommendation.targetColor.g &&
-        r.targetColor.b == recommendation.targetColor.b
-      );
-
-      if (!isDuplicate) {
-        recommendations.add(recommendation);
-      }
     }
-
-    recommendations.sort((a, b) => b.potentialScore.compareTo(a.potentialScore));
-
     return recommendations;
   }
   
@@ -215,27 +199,6 @@ class RecommendationEngine {
       b: (complementaryRgb.$3 * 255).round(),
       pct: 100,
     );
-  }
-
-  static String _suggestSpecificType(String type, StyleProfile userStyle) {
-    if (userStyle.topTypes.isNotEmpty) {
-      for (final topType in userStyle.topTypes) {
-        if (topType.contains(_getTypeKeyword(type))) {
-          return topType;
-        }
-      }
-    }
-    return _getTypeKeyword(type);
-  }
-
-  static String _getTypeKeyword(String type) {
-    switch (type.toLowerCase()) {
-      case 'footwear': return 'sneakers';
-      case 'outerwear': return 'hoodie';
-      case 'headwear': return 'cap';
-      case 'accessory': return 'bag';
-      default: return type;
-    }
   }
 
   static List<String> _suggestBrands(String type, StyleProfile userStyle) {
