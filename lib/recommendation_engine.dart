@@ -2,14 +2,15 @@ import 'dart:math';
 import 'models.dart';
 import 'outfit_generator.dart';
 import 'color_utils.dart';
+import 'network_manager.dart';
 
 class RecommendationEngine {
-  static List<MissingPieceRecommendation> generateRecommendations(
+  static Future<List<MissingPieceRecommendation>> generateRecommendations(
     List<Clothing> allClothes,
     StyleProfile userStyle, {
     int maxRecommendations = 5,
     bool boldMode = false,
-  }) {
+  }) async {
     final recommendations = <MissingPieceRecommendation>[];
     final random = Random();
 
@@ -42,7 +43,6 @@ class RecommendationEngine {
         fullOutfit.add(byType['bottom']![random.nextInt(byType['bottom']!.length)]);
       }
       
-      // Ajouter les autres types SAUF celui qui va manquer
       for (final type in byType.keys) {
         if (type != 'top' && type != 'bottom' && type != missingType) {
           if (byType[type]!.isNotEmpty && random.nextDouble() > 0.3) {
@@ -67,29 +67,90 @@ class RecommendationEngine {
 
       
       final specificType = _suggestSpecificType(missingType, userStyle);
-      
-      
-      final suggestedBrands = _suggestBrands(missingType, userStyle);
 
-      
-      final reason = _generateReason(missingType, targetColor, fullOutfit);
+      List<Map<String, dynamic>> remoteItems = [];
+      try {
+        final criteriaString = 'missingType:$missingType';
+        remoteItems = await NetworkManager().recommendClothingItems(userStyle.styleType, criteriaString);
+      } catch (e) {
+        remoteItems = [];
+      }
 
-      
-      final keywords = _generateSearchKeywords(missingType, specificType, targetColor, suggestedBrands);
+      List<String> suggestedBrands = _suggestBrands(missingType, userStyle);
+      String reason = 'Recommended based on your style';
+      List<String> keywords = _generateSearchKeywords(missingType, specificType, targetColor, suggestedBrands);
+      double potentialScore = min(98.0, currentScore + 15 + random.nextDouble() * 10);
 
-      
-      final potentialScore = min(98.0, currentScore + 15 + random.nextDouble() * 10);
+      if (remoteItems.isNotEmpty) {
+        final first = remoteItems.first;
+        if (first['brand'] != null) {
+          suggestedBrands = [ (first['brand'] as String).toLowerCase() ];
+        }
+        if (first['colors'] != null) {
+          final colorField = first['colors'] as String;
+          final firstColor = colorField.split(';').first.trim();
+          final vals = firstColor.split(',').map((s) => int.tryParse(s.trim()) ?? 0).toList();
+          if (vals.length >= 3) {
+            final remoteColor = ColorInfo(r: vals[0], g: vals[1], b: vals[2], pct: 100);
+            final recommendation = MissingPieceRecommendation(
+              type: missingType,
+              specificType: first['specificType'] ?? specificType,
+              suggestedBrands: suggestedBrands,
+              targetColor: remoteColor,
+              existingOutfit: fullOutfit,
+              currentScore: currentScore,
+              potentialScore: potentialScore,
+              reason: first['reason'] ?? reason,
+              searchKeywords: keywords,
+            );
+
+            final isDuplicate = recommendations.any((r) =>
+              r.type == recommendation.type &&
+              r.targetColor.r == recommendation.targetColor.r &&
+              r.targetColor.g == recommendation.targetColor.g &&
+              r.targetColor.b == recommendation.targetColor.b);
+
+            if (!isDuplicate) recommendations.add(recommendation);
+            continue;
+          }
+        }
+        final recommendation = MissingPieceRecommendation(
+          type: missingType,
+          specificType: remoteItems.first['specificType'] ?? specificType,
+          suggestedBrands: suggestedBrands,
+          targetColor: targetColor,
+          existingOutfit: fullOutfit,
+          currentScore: currentScore,
+          potentialScore: potentialScore,
+          reason: remoteItems.first['reason'] ?? reason,
+          searchKeywords: keywords,
+        );
+
+        final isDuplicate = recommendations.any((r) =>
+          r.type == recommendation.type &&
+          r.targetColor.r == recommendation.targetColor.r &&
+          r.targetColor.g == recommendation.targetColor.g &&
+          r.targetColor.b == recommendation.targetColor.b);
+
+        if (!isDuplicate) recommendations.add(recommendation);
+        continue;
+      }
+
+      final suggestedBrandsLocal = _suggestBrands(missingType, userStyle);
+      final reasonLocal = 'Recommended based on your style';
+      final keywordsLocal = _generateSearchKeywords(missingType, specificType, targetColor, suggestedBrandsLocal);
+      final potentialScoreLocal = min(98.0, currentScore + 15 + random.nextDouble() * 10);
 
       final recommendation = MissingPieceRecommendation(
         type: missingType,
         specificType: specificType,
-        suggestedBrands: suggestedBrands,
+        suggestedBrands: suggestedBrandsLocal,
         targetColor: targetColor,
         existingOutfit: fullOutfit,
         currentScore: currentScore,
-        potentialScore: potentialScore,
-        reason: reason,
-        searchKeywords: keywords,
+        potentialScore: potentialScoreLocal,
+        reason: reasonLocal,
+        searchKeywords: keywordsLocal,
       );
 
       
@@ -105,19 +166,17 @@ class RecommendationEngine {
       }
     }
 
-    // Trier par score potentiel (meilleur en premier)
     recommendations.sort((a, b) => b.potentialScore.compareTo(a.potentialScore));
 
     return recommendations;
   }
-
   
   static ColorInfo? _findMissingColorForPerfectRecall(List<Clothing> outfit) {
-    // Extraire toutes les couleurs existantes
+
     final existingColors = <ColorInfo>[];
     for (final item in outfit) {
       for (final color in item.colors) {
-        if (color.pct >= 20) { // Couleurs significatives
+        if (color.pct >= 20) {
           existingColors.add(color);
         }
       }
@@ -125,9 +184,6 @@ class RecommendationEngine {
 
     if (existingColors.isEmpty) return null;
 
-    
-    
-    
     for (final color in existingColors) {
       if (color.pct >= 20 && color.pct <= 40) {
         
@@ -161,9 +217,7 @@ class RecommendationEngine {
     );
   }
 
-  /// Suggère un type spécifique basé sur le type général et le style de l'utilisateur
   static String _suggestSpecificType(String type, StyleProfile userStyle) {
-    // Utiliser les types préférés de l'utilisateur
     if (userStyle.topTypes.isNotEmpty) {
       for (final topType in userStyle.topTypes) {
         if (topType.contains(_getTypeKeyword(type))) {
@@ -171,24 +225,7 @@ class RecommendationEngine {
         }
       }
     }
-
-    // Fallback sur des types génériques par catégorie
-    switch (type.toLowerCase()) {
-      case 'footwear':
-        return userStyle.styleType == 'streetwear' 
-          ? 'sneakers montantes' 
-          : 'sneakers';
-      case 'outerwear':
-        return userStyle.styleType == 'streetwear' 
-          ? 'hoodie oversize' 
-          : 'veste';
-      case 'headwear':
-        return 'casquette snapback';
-      case 'accessory':
-        return 'sac bandoulière';
-      default:
-        return type;
-    }
+    return _getTypeKeyword(type);
   }
 
   static String _getTypeKeyword(String type) {
@@ -201,62 +238,23 @@ class RecommendationEngine {
     }
   }
 
-  /// Suggère des marques basées sur le profil de style
   static List<String> _suggestBrands(String type, StyleProfile userStyle) {
     final suggestions = <String>[];
 
-    // Utiliser les marques préférées de l'utilisateur
     if (userStyle.topBrands.isNotEmpty) {
       suggestions.addAll(userStyle.topBrands.take(2));
     }
 
-    // Ajouter des marques pertinentes selon le style et le type
-    if (type.toLowerCase() == 'footwear') {
-      if (userStyle.styleType == 'streetwear') {
-        suggestions.addAll(['Nike', 'Jordan', 'New Balance', 'Adidas']);
-      } else if (userStyle.styleType == 'luxury') {
-        suggestions.addAll(['Balenciaga', 'Common Projects', 'Golden Goose']);
-      } else {
-        suggestions.addAll(['Vans', 'Converse', 'Nike']);
-      }
-    } else if (type.toLowerCase() == 'outerwear') {
-      if (userStyle.styleType == 'streetwear') {
-        suggestions.addAll(['Carhartt', 'Dickies', 'Stüssy']);
-      } else {
-        suggestions.addAll(['Zara', 'H&M', 'Uniqlo']);
-      }
-    }
-
-    // Garder unique et limiter à 3
     return suggestions.toSet().take(3).toList();
   }
 
-  /// Génère une raison expliquant pourquoi cette pièce complèterait l'outfit
-  static String _generateReason(String type, ColorInfo color, List<Clothing> outfit) {
-    final colorName = _getColorName(color);
-    
-    // Trouver les types dans l'outfit
-    final types = outfit.map((c) => c.type).toSet();
-    
-    if (types.contains('top') && types.contains('bottom')) {
-      return 'Un $type $colorName créerait un rappel de couleur parfait entre le haut et le bas, complétant l\'harmonie de l\'outfit';
-    } else if (types.contains('top')) {
-      return 'Un $type $colorName rappellerait la couleur du haut pour un look cohérent';
-    } else {
-      return 'Un $type $colorName ajouterait la touche de couleur manquante pour un outfit parfait';
-    }
-  }
-
-  /// Convertit RGB en nom de couleur approximatif
   static String _getColorName(ColorInfo color) {
     final r = color.r;
     final g = color.g;
     final b = color.b;
 
-    // Noir
     if (r < 50 && g < 50 && b < 50) return 'noir';
     
-    // Blanc
     if (r > 200 && g > 200 && b > 200) return 'blanc';
     
     // Gris
@@ -291,7 +289,6 @@ class RecommendationEngine {
     return 'coloré';
   }
 
-  /// Génère des mots-clés pour la recherche sur Vinted/Shopify
   static List<String> _generateSearchKeywords(
     String type,
     String specificType,
@@ -300,15 +297,12 @@ class RecommendationEngine {
   ) {
     final keywords = <String>[];
     
-    // Ajouter le type spécifique
     keywords.add(specificType);
     
-    // Ajouter la couleur
     final colorName = _getColorName(color);
     keywords.add(colorName);
     keywords.add('$specificType $colorName');
     
-    // Ajouter les marques
     if (brands.isNotEmpty) {
       keywords.add('${brands.first} $specificType');
       keywords.add('${brands.first} $colorName');

@@ -9,6 +9,8 @@ class NetworkManager {
 
   final String endpoint = 'https://sapemoi-api.onrender.com/analyze';
   final String totalEndpoint = 'https://sapemoi-api.onrender.com/total';
+  final String styleEndpoint = 'https://sapemoi-api.onrender.com/analyse_user_style';
+  final String recommendEndpoint = 'https://sapemoi-api.onrender.com/recomands_clothing_items';
 
   Future<Map<String, dynamic>> estimateWardrobeValue(
     List<Map<String, dynamic>> items, {
@@ -52,13 +54,123 @@ class NetworkManager {
         throw Exception('Missing total in response');
       }
 
-      print('✅ Wardrobe value estimated: \$${total}');
+      print('✅ Wardrobe value estimated: \$$total');
       return {
         'total': total.toDouble(),
         'breakdown': breakdown ?? [],
       };
     } catch (e) {
       print('❌ Network error: $e');
+      rethrow;
+    }
+  }
+
+  Future<String> estimateUserStyle(
+    List<Map<String, dynamic>> items, {
+    Duration timeout = const Duration(minutes: 2),
+  }) async {
+    try {
+      print('🔄 Estimating user style for ${items.length} items');
+
+      final payload = {
+        'itemsList': items.map((item) => {
+          'brand': item['brand'],
+          'product': item['product'],
+          'type': item['type'],
+          'specificType': item['specificType'],
+        }).toList()
+      };
+
+      final body = json.encode(payload);
+
+      final response = await http
+          .post(
+            Uri.parse(styleEndpoint),
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(timeout);
+
+      print('📥 Style response status: ${response.statusCode}');
+
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
+      }
+
+      final jsonData = json.decode(response.body) as Map<String, dynamic>;
+
+      if (jsonData.containsKey('error')) {
+        throw Exception('API Error: ${jsonData['error']}');
+      }
+
+      final estimated = jsonData['estimatedStyle'] as String?;
+      if (estimated == null || estimated.isEmpty) {
+        return 'Major style: "casual"';
+      }
+
+      print('✅ Style estimated: $estimated');
+      return estimated;
+    } catch (e) {
+      print('❌ Network error while estimating style: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> recommendClothingItems(
+    String userStyle,
+    String criteria, {
+    Duration timeout = const Duration(minutes: 2),
+  }) async {
+    try {
+      print('🔄 Requesting clothing recommendations for style="$userStyle" criteria="$criteria"');
+
+      final payload = {
+        'userStyle': userStyle,
+        'criterias': criteria,
+      };
+
+      final body = json.encode(payload);
+
+      final response = await http
+          .post(
+            Uri.parse(recommendEndpoint),
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(timeout);
+
+      print('📥 Recommend response status: ${response.statusCode}');
+
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
+      }
+
+      final jsonData = json.decode(response.body);
+
+      if (jsonData is Map<String, dynamic>) {
+        if (jsonData['recommendations'] is List) {
+          return List<Map<String, dynamic>>.from(jsonData['recommendations']);
+        }
+        if (jsonData['data'] is List) {
+          return List<Map<String, dynamic>>.from(jsonData['data']);
+        }
+        return [Map<String, dynamic>.from(jsonData)];
+      }
+
+      if (jsonData is List) {
+        return List<Map<String, dynamic>>.from(jsonData.map((e) => Map<String, dynamic>.from(e)));
+      }
+
+      try {
+        final parsed = json.decode(response.body);
+        if (parsed is List) {
+          return List<Map<String, dynamic>>.from(parsed.map((e) => Map<String, dynamic>.from(e)));
+        }
+      } catch (_) {}
+
+      return [ {'raw': response.body} ];
+    } catch (e) {
+      print('❌ Network error while requesting recommendations: $e');
       rethrow;
     }
   }

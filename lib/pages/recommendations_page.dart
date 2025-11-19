@@ -30,18 +30,16 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     _generateRecommendations();
   }
 
-  void _generateRecommendations() {
+  Future<void> _generateRecommendations() async {
     if (widget.clothes.length < 3) {
       return;
     }
 
     setState(() => isGenerating = true);
 
-    // Analyser le style de l'utilisateur
-    userStyle = StyleProfile.fromClothes(widget.clothes);
+    userStyle = await StyleProfile.fromClothes(widget.clothes);
 
-    // Générer les recommandations
-    final recs = RecommendationEngine.generateRecommendations(
+    final recs = await RecommendationEngine.generateRecommendations(
       widget.clothes,
       userStyle!,
       maxRecommendations: 5,

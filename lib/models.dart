@@ -1,3 +1,5 @@
+import 'package:sapemoi/network_manager.dart';
+
 class Clothing {
   int id;
   String name;
@@ -130,6 +132,8 @@ class StyleProfile {
   final Map<String, int> colorPreferences;
   final List<String> topBrands;
   final List<String> topTypes;
+  final List<String> allBrands;
+  final List<String> allSpecificTypes;
   final List<ColorInfo> topColors;
 
   StyleProfile({
@@ -139,30 +143,33 @@ class StyleProfile {
     required this.colorPreferences,
     required this.topBrands,
     required this.topTypes,
+    required this.allBrands,
+    required this.allSpecificTypes,
     required this.topColors,
   });
 
-  factory StyleProfile.fromClothes(List<Clothing> clothes) {
+  static Future<StyleProfile> fromClothes(List<Clothing> clothes) async {
     final brandMap = <String, int>{};
     final typeMap = <String, int>{};
     final colorMap = <String, int>{};
+    final allBrands = <String>{};
+    final allSpecificTypes = <String>{};
 
     for (final item in clothes) {
-      // Count brands weighted by wear count
       final brand = item.brand.toLowerCase();
       if (brand != 'unknown') {
         brandMap[brand] = (brandMap[brand] ?? 0) + (item.wearCount > 0 ? item.wearCount : 1);
+        allBrands.add(brand);
       }
 
-      // Count specific types weighted by wear count
       final type = item.specificType.toLowerCase();
       if (type != 'unknown') {
         typeMap[type] = (typeMap[type] ?? 0) + (item.wearCount > 0 ? item.wearCount : 1);
+        allSpecificTypes.add(type);
       }
 
-      // Count dominant colors
       for (final color in item.colors) {
-        if (color.pct >= 30) { // Only significant colors
+        if (color.pct >= 30) {
           final key = '${color.r},${color.g},${color.b}';
           final weight = (color.pct / 100.0 * (item.wearCount > 0 ? item.wearCount : 1)).round();
           colorMap[key] = (colorMap[key] ?? 0) + weight;
@@ -170,17 +177,14 @@ class StyleProfile {
       }
     }
 
-    // Sort and get top 3 brands
     final sortedBrands = brandMap.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     final topBrands = sortedBrands.take(3).map((e) => e.key).toList();
 
-    // Sort and get top 3 types
     final sortedTypes = typeMap.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     final topTypes = sortedTypes.take(3).map((e) => e.key).toList();
 
-    // Sort and get top 5 colors
     final sortedColors = colorMap.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     final topColors = sortedColors.take(5).map((e) {
@@ -193,31 +197,35 @@ class StyleProfile {
       );
     }).toList();
 
-    String detectStyle() {
-      final allBrands = topBrands.map((b) => b.toLowerCase()).join(' ');
-      final allTypes = topTypes.map((t) => t.toLowerCase()).join(' ');
-      
-      if (allBrands.contains('nike') || allBrands.contains('jordan') || 
-          allBrands.contains('supreme') || allTypes.contains('sneakers') || 
-          allTypes.contains('hoodie') || allTypes.contains('jersey')) {
-        return 'streetwear';
+    final items = clothes.map((c) => {
+      'brand': c.brand,
+      'product': c.productName,
+      'type': c.type,
+      'specificType': c.specificType,
+    }).toList();
+
+    String styleLabel = 'casual';
+    try {
+      final styleString = await NetworkManager().estimateUserStyle(items);
+      final match = RegExp('"([^"]+)"').firstMatch(styleString);
+      if (match != null) {
+        styleLabel = match.group(1) ?? 'casual';
+      } else {
+        styleLabel = styleString.split(':').length > 1 ? styleString.split(':')[1].trim() : 'casual';
       }
-      
-      if (allBrands.contains('gucci') || allBrands.contains('prada') || 
-          allBrands.contains('louis vuitton')) {
-        return 'luxury';
-      }
-      
-      return 'casual';
+    } catch (_) {
+      styleLabel = 'casual';
     }
 
     return StyleProfile(
-      styleType: detectStyle(),
+      styleType: styleLabel,
       brandPreferences: brandMap,
       typePreferences: typeMap,
       colorPreferences: colorMap,
       topBrands: topBrands,
       topTypes: topTypes,
+      allBrands: allBrands.toList(),
+      allSpecificTypes: allSpecificTypes.toList(),
       topColors: topColors,
     );
   }

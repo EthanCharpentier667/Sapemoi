@@ -389,7 +389,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     _buildInfoRow(
                       icon: Icons.badge,
                       label: 'User ID',
-                      value: user.uid.substring(0, 12) + '...',
+                      value: '${user.uid.substring(0, 12)}...',
                     ),
                     const Divider(height: 32),
                     _buildInfoRow(

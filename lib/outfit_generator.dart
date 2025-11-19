@@ -177,7 +177,7 @@ class OutfitGenerator {
                 (type2 == 'top' && type1 == 'bottom');
               
               if (!isAdjacent) {
-                final key = '${i}_${j}';
+                final key = '${i}_$j';
                 if (!recalledPairs.contains(key)) {
                   colorRecallCount++;
                   recalledPairs.add(key);
@@ -185,7 +185,7 @@ class OutfitGenerator {
                   final outfitIdx1 = outfit.indexWhere((item) => item.type.toLowerCase() == type1);
                   final outfitIdx2 = outfit.indexWhere((item) => item.type.toLowerCase() == type2);
                   if (outfitIdx1 >= 0 && outfitIdx2 >= 0) {
-                    final pairKey = outfitIdx1 < outfitIdx2 ? '${outfitIdx1}_${outfitIdx2}' : '${outfitIdx2}_${outfitIdx1}';
+                    final pairKey = outfitIdx1 < outfitIdx2 ? '${outfitIdx1}_$outfitIdx2' : '${outfitIdx2}_$outfitIdx1';
                     pairsWithRecall.add(pairKey);
                   }
                 }
@@ -294,7 +294,7 @@ class OutfitGenerator {
 
     for (var i = 0; i < outfit.length; i++) {
       for (var j = i + 1; j < outfit.length; j++) {
-        final pairKey = i < j ? '${i}_${j}' : '${j}_${i}';
+        final pairKey = i < j ? '${i}_$j' : '${j}_$i';
         if (pairsWithRecall.contains(pairKey)) {
           continue;
         }

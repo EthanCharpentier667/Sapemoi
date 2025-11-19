@@ -345,7 +345,7 @@ class _ContentViewState extends State<ContentView> {
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
                                         Text(
-                                          '${compatibility}%',
+                                          '$compatibility%',
                                           style: TextStyle(
                                             fontSize: 20,
                                             fontWeight: FontWeight.bold,
@@ -1733,7 +1733,7 @@ class _ClothingDetailModalState extends State<ClothingDetailModal> {
                             ],
                           ),
                         );
-                      }).toList(),
+                      }),
                       if (_editableColors.length < 5)
                         TextButton.icon(
                           onPressed: () {

@@ -51,8 +51,8 @@ class UserModel {
     );
   }
 
-  UserModel updateFromClothes(List<Clothing> clothes) {
-    final profile = StyleProfile.fromClothes(clothes);
+  Future<UserModel> updateFromClothes(List<Clothing> clothes) async {
+    final profile = await StyleProfile.fromClothes(clothes);
     return UserModel(
       uid: uid,
       email: email,
