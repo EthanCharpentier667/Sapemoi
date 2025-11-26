@@ -1,8 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'user_model.dart';
+import 'network_manager.dart';
 
 class AuthManager {
   static final AuthManager _instance = AuthManager._internal();
@@ -18,15 +18,8 @@ class AuthManager {
   // MARK: - Google Sign In
   Future<UserCredential?> signInWithGoogle() async {
     try {
-      print('🔵 Starting Google Sign In...');
-      
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        print('❌ Google sign in cancelled');
-        return null;
-      }
-
-      print('✅ Google user: ${googleUser.email}');
+      if (googleUser == null) return null;
 
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
@@ -35,12 +28,9 @@ class AuthManager {
       );
 
       final userCredential = await _auth.signInWithCredential(credential);
-      print('✅ Firebase sign in successful: ${userCredential.user?.email}');
-      
-      await _saveUserLocally(userCredential.user!);
+      await _saveUserToRemote(userCredential.user!);
       return userCredential;
     } catch (e) {
-      print('❌ Google sign in error: $e');
       rethrow;
     }
   }
@@ -48,8 +38,6 @@ class AuthManager {
   // MARK: - Apple Sign In
   Future<UserCredential?> signInWithApple() async {
     try {
-      print('🍎 Starting Apple Sign In...');
-      
       final appleCredential = await SignInWithApple.getAppleIDCredential(
         scopes: [
           AppleIDAuthorizationScopes.email,
@@ -63,12 +51,9 @@ class AuthManager {
       );
 
       final userCredential = await _auth.signInWithCredential(oauthCredential);
-      print('✅ Apple sign in successful: ${userCredential.user?.email}');
-      
-      await _saveUserLocally(userCredential.user!);
+      await _saveUserToRemote(userCredential.user!);
       return userCredential;
     } catch (e) {
-      print('❌ Apple sign in error: $e');
       rethrow;
     }
   }
@@ -80,10 +65,9 @@ class AuthManager {
         email: email,
         password: password,
       );
-      await _saveUserLocally(userCredential.user!);
+      await _saveUserToRemote(userCredential.user!);
       return userCredential;
     } catch (e) {
-      print('❌ Email sign in error: $e');
       rethrow;
     }
   }
@@ -94,10 +78,9 @@ class AuthManager {
         email: email,
         password: password,
       );
-      await _saveUserLocally(userCredential.user!);
+      await _saveUserToRemote(userCredential.user!);
       return userCredential;
     } catch (e) {
-      print('❌ Email sign up error: $e');
       rethrow;
     }
   }
@@ -107,43 +90,39 @@ class AuthManager {
     try {
       await _googleSignIn.signOut();
       await _auth.signOut();
-      await _clearUserLocally();
-      print('✅ Sign out successful');
     } catch (e) {
-      print('❌ Sign out error: $e');
       rethrow;
     }
   }
 
-  // MARK: - Local Storage
-  Future<void> _saveUserLocally(User user) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('uid', user.uid);
-    await prefs.setString('email', user.email ?? '');
-    await prefs.setString('displayName', user.displayName ?? '');
-    await prefs.setString('photoURL', user.photoURL ?? '');
+  // MARK: - Remote-only user storage
+  Future<void> _saveUserToRemote(User user) async {
+    try {
+      final userMap = UserModel(
+        uid: user.uid,
+        email: user.email ?? '',
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        createdAt: DateTime.now(),
+      ).toMap();
+      await NetworkManager().upsertUser(userMap);
+    } catch (e) {}
   }
 
-  Future<void> _clearUserLocally() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('uid');
-    await prefs.remove('email');
-    await prefs.remove('displayName');
-    await prefs.remove('photoURL');
-  }
-
+  /// Returns the user model fetched from the remote API (no local cache).
   Future<UserModel?> getLocalUser() async {
-    final prefs = await SharedPreferences.getInstance();
-    final uid = prefs.getString('uid');
-    
-    if (uid == null) return null;
-
-    return UserModel(
-      uid: uid,
-      email: prefs.getString('email') ?? '',
-      displayName: prefs.getString('displayName'),
-      photoURL: prefs.getString('photoURL'),
-      createdAt: DateTime.now(),
-    );
+    final firebaseUser = _auth.currentUser;
+    if (firebaseUser == null) return null;
+    try {
+      var remote = await NetworkManager().getUserRemote(firebaseUser.uid);
+      if (remote == null) {
+        await _saveUserToRemote(firebaseUser);
+        remote = await NetworkManager().getUserRemote(firebaseUser.uid);
+        if (remote == null) return null;
+      }
+      return UserModel.fromMap(remote);
+    } catch (e) {
+      return null;
+    }
   }
 }

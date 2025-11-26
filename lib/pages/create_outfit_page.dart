@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:firebase_auth/firebase_auth.dart';
+import '../auth_manager.dart';
+// import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../models.dart';
@@ -119,11 +120,11 @@ class _CreateOutfitPageState extends State<CreateOutfitPage> {
                           const SizedBox(height: 16),
                           ElevatedButton.icon(
                             onPressed: () async {
-                              final user = FirebaseAuth.instance.currentUser;
-                              if (user == null) return;
+                              final userModel = await AuthManager().getLocalUser();
+                              if (userModel == null) return;
                               final ids = outfitSlots.values.where((e) => e != null).cast<Clothing>().map((c) => c.id).toList();
                               if (ids.isEmpty) return;
-                              await DBManager().markOutfitAsUsed(ids, user.uid);
+                              await DBManager().markOutfitAsUsed(ids, userModel.uid);
                               widget.onUpdate();
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Outfit marked as worn!')));

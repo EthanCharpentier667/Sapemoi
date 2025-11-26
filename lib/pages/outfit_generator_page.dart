@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:firebase_auth/firebase_auth.dart';
+import '../auth_manager.dart';
 import 'package:flutter/material.dart';
 
 import '../models.dart';
@@ -166,10 +166,10 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
                           );
 
                           if (shouldMark == true && mounted) {
-                            final user = FirebaseAuth.instance.currentUser;
-                            if (user != null) {
+                            final userModel = await AuthManager().getLocalUser();
+                            if (userModel != null) {
                               final ids = outfit.outfit.map((c) => c.id).toList();
-                              await DBManager().markOutfitAsUsed(ids, user.uid);
+                              await DBManager().markOutfitAsUsed(ids, userModel.uid);
                               widget.onUpdate();
 
                               if (mounted) {

@@ -13,6 +13,257 @@ class NetworkManager {
       'https://sapemoi-api.onrender.com/analyse_user_style';
   final String recommendEndpoint =
       'https://sapemoi-api.onrender.com/recomands_clothing_items';
+  final String googleSearchEndpoint =
+      'https://sapemoi-api.onrender.com/google_search';
+  final String remoteApiBase = 'https://sapemoi-api.onrender.com/db';
+
+  // --- Remote DB API helpers (Render endpoints)
+  Future<bool> upsertUser(Map<String, dynamic> user) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/users');
+      final body = json.encode(user);
+      final resp = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(const Duration(seconds: 10));
+      return resp.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Update only the styleProfile field for a user (doesn't overwrite other fields)
+  Future<bool> updateUserStyleProfile(String uid, String styleProfileJson) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/users/$uid/style');
+      final body = json.encode({'styleProfile': styleProfileJson});
+      final resp = await http
+          .put(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(const Duration(seconds: 10));
+      return resp.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getUserRemote(String uid) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/users/$uid');
+      final resp = await http
+          .get(url, headers: {'Content-Type': 'application/json'})
+          .timeout(const Duration(seconds: 10));
+      if (resp.statusCode != 200) return null;
+      final jsonData = json.decode(resp.body);
+      if (jsonData is Map<String, dynamic>) return jsonData;
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getUserStyleRemote(String uid) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/users/$uid/style');
+      final resp = await http
+          .get(url, headers: {'Content-Type': 'application/json'})
+          .timeout(const Duration(seconds: 10));
+      if (resp.statusCode != 200) return null;
+      final jsonData = json.decode(resp.body) as Map<String, dynamic>;
+      final styleProfile = jsonData['styleProfile'];
+      
+      // If styleProfile is null or empty, return null (user hasn't estimated style yet)
+      if (styleProfile == null) return null;
+      
+      if (styleProfile is String) {
+        if (styleProfile.isEmpty) return null;
+        try {
+          return json.decode(styleProfile) as Map<String, dynamic>;
+        } catch (_) {
+          return null;
+        }
+      }
+      
+      if (styleProfile is Map<String, dynamic>) return styleProfile;
+      
+      return null;
+    } catch (e) {
+
+      return null;
+    }
+  }
+
+  Future<int?> addClothingRemote(Map<String, dynamic> payload) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/clothing');
+      final body = json.encode(payload);
+      final resp = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(const Duration(seconds: 10));
+      if (resp.statusCode != 200) return null;
+      final jsonData = json.decode(resp.body) as Map<String, dynamic>;
+      return jsonData['id'] as int?;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllClothingRemote(String userId) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/clothing/$userId');
+      final resp = await http
+          .get(url, headers: {'Content-Type': 'application/json'})
+          .timeout(const Duration(seconds: 10));
+      if (resp.statusCode != 200) return [];
+      final jsonData = json.decode(resp.body);
+      if (jsonData is List) return List<Map<String, dynamic>>.from(jsonData);
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>?> updateClothingRemote(
+    int id,
+    Map<String, dynamic> updates,
+  ) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/clothing/$id');
+      final resp = await http
+          .put(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode(updates),
+          )
+          .timeout(const Duration(seconds: 10));
+      if (resp.statusCode != 200) return null;
+      return json.decode(resp.body) as Map<String, dynamic>;
+    } catch (e) {
+
+      return null;
+    }
+  }
+
+  Future<bool> deleteClothingRemote(int id) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/clothing/$id');
+      final resp = await http.delete(url).timeout(const Duration(seconds: 10));
+      return resp.statusCode == 200;
+    } catch (e) {
+
+      return false;
+    }
+  }
+
+  Future<bool> markOutfitUsedRemote(
+    List<int> clothingIds,
+    String userId,
+  ) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/outfit/mark_used');
+      final resp = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({'clothingIds': clothingIds, 'userId': userId}),
+          )
+          .timeout(const Duration(seconds: 10));
+      return resp.statusCode == 200;
+    } catch (e) {
+
+      return false;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getRecentOutfitsRemote(
+    String userId, {
+    int limit = 10,
+  }) async {
+    try {
+      final url = Uri.parse(
+        '$remoteApiBase/outfit/recent/$userId?limit=$limit',
+      );
+      final resp = await http.get(url).timeout(const Duration(seconds: 10));
+      if (resp.statusCode != 200) return [];
+      final jsonData = json.decode(resp.body);
+      if (jsonData is List) return List<Map<String, dynamic>>.from(jsonData);
+      return [];
+    } catch (e) {
+
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getWearStatsRemote(String userId) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/clothing/wear_stats/$userId');
+      final resp = await http.get(url).timeout(const Duration(seconds: 10));
+      if (resp.statusCode != 200) return [];
+      final jsonData = json.decode(resp.body);
+      if (jsonData is List) return List<Map<String, dynamic>>.from(jsonData);
+      return [];
+    } catch (e) {
+
+      return [];
+    }
+  }
+
+  Future<bool> updateClothingValueRemote(int id, double value) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/clothing/$id/value');
+      final resp = await http
+          .put(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({'value': value}),
+          )
+          .timeout(const Duration(seconds: 10));
+      return resp.statusCode == 200;
+    } catch (e) {
+
+      return false;
+    }
+  }
+
+  Future<double> getTotalWardrobeValueRemote(String userId) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/clothing/total_value/$userId');
+      final resp = await http.get(url).timeout(const Duration(seconds: 10));
+      if (resp.statusCode != 200) return 0.0;
+      final jsonData = json.decode(resp.body) as Map<String, dynamic>;
+      final total = jsonData['total'];
+      if (total is num) return total.toDouble();
+      return 0.0;
+    } catch (e) {
+
+      return 0.0;
+    }
+  }
+
+  Future<List<int>> getUnvaluedClothingIdsRemote(String userId) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/clothing/unvalued/$userId');
+      final resp = await http.get(url).timeout(const Duration(seconds: 10));
+      if (resp.statusCode != 200) return [];
+      final jsonData = json.decode(resp.body);
+      if (jsonData is List)
+        return List<int>.from(jsonData.map((e) => e as int));
+      return [];
+    } catch (e) {
+
+      return [];
+    }
+  }
 
   Future<Map<String, dynamic>> estimateWardrobeValue(
     List<Map<String, dynamic>> items, {
@@ -88,9 +339,7 @@ class NetworkManager {
           )
           .toList();
 
-      final payload = {
-        'itemsList': json.encode(itemsArray),
-      };
+      final payload = {'itemsList': json.encode(itemsArray)};
 
       final body = json.encode(payload);
 
@@ -133,7 +382,9 @@ class NetworkManager {
     Duration timeout = const Duration(minutes: 2),
   }) async {
     try {
-      print('🔄 Requesting clothing recommendations for style="$userStyle" criteria="$criteria"');
+      print(
+        '🔄 Requesting clothing recommendations for style="$userStyle" criteria="$criteria"',
+      );
 
       final dynamic payloadCriteria;
       if (criteria is String) {
@@ -142,7 +393,7 @@ class NetworkManager {
         payloadCriteria = criteria;
       }
 
-      final payload = {'userStyle': userStyle, 'criteria': payloadCriteria};
+      final payload = {'userStyle': userStyle, 'criterias': payloadCriteria};
 
       final body = json.encode(payload);
 
@@ -274,6 +525,133 @@ class NetworkManager {
     } catch (e) {
       print('❌ Network error: $e');
       rethrow;
+    }
+  }
+
+  /// Calls the /google_search endpoint with a simple payload and returns
+  /// the first result (or null). Expected payload shape:
+  /// {"product":"...","brand":"...","colors":[{"r":0,"g":0,"b":0},...]}
+  Future<Map<String, dynamic>?> googleSearch(
+    Map<String, dynamic> payload, {
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    try {
+      print('🔎 Google search payload: $payload');
+      final body = json.encode(payload);
+      final response = await http
+          .post(
+            Uri.parse(googleSearchEndpoint),
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(timeout);
+
+      print('📥 Google search status: ${response.statusCode}');
+      print('📥 Google search body: ${response.body}');
+      if (response.statusCode != 200) {
+        print('⚠️ Google search failed: ${response.body}');
+        return null;
+      }
+
+      final jsonData = json.decode(response.body);
+      print('📦 Parsed google_search jsonData type=${jsonData.runtimeType}');
+      if (jsonData == null) return null;
+
+      if (jsonData is List && jsonData.isNotEmpty) {
+        final first = jsonData.first;
+        final Map<String, dynamic> raw = first is Map<String, dynamic>
+            ? first
+            : Map<String, dynamic>.from(first as Map);
+        final normalized = <String, dynamic>{
+          'Name':
+              raw['Name'] ??
+              raw['name'] ??
+              raw['title'] ??
+              raw['product'] ??
+              '',
+          'ImageURL':
+              raw['ImageURL'] ??
+              raw['imageUrl'] ??
+              raw['image'] ??
+              raw['thumbnail'] ??
+              '',
+          'url':
+              raw['formattedUrl'] ??
+              raw['url'] ??
+              raw['link'] ??
+              raw['source'] ??
+              '',
+          'Shopify':
+              raw['Shopify'] ??
+              raw['shopify'] ??
+              raw['ShopifyLink'] ??
+              raw['shopify_link'] ??
+              null,
+        };
+        print('✅ Returning normalized google result: $normalized');
+        return normalized;
+      }
+
+      if (jsonData is Map<String, dynamic>) {
+        Map<String, dynamic> raw;
+        if (jsonData.containsKey('result') && jsonData['result'] is Map) {
+          raw = Map<String, dynamic>.from(jsonData['result'] as Map);
+          print('ℹ️ google_search: extracted nested "result" map');
+        } else if (jsonData.containsKey('results') &&
+            jsonData['results'] is List &&
+            (jsonData['results'] as List).isNotEmpty) {
+          raw = Map<String, dynamic>.from(
+            (jsonData['results'] as List).first as Map,
+          );
+          print(
+            'ℹ️ google_search: extracted first element from "results" list',
+          );
+        } else if (jsonData.containsKey('data') && jsonData['data'] is Map) {
+          raw = Map<String, dynamic>.from(jsonData['data'] as Map);
+          print('ℹ️ google_search: extracted nested "data" map');
+        } else {
+          raw = Map<String, dynamic>.from(jsonData);
+          print('ℹ️ google_search: using top-level map');
+        }
+
+        final normalized = <String, dynamic>{
+          'Name':
+              raw['Name'] ??
+              raw['name'] ??
+              raw['title'] ??
+              raw['product'] ??
+              '',
+          'ImageURL':
+              raw['ImageURL'] ??
+              raw['imageUrl'] ??
+              raw['image'] ??
+              raw['thumbnail'] ??
+              '',
+          'url':
+              raw['formattedUrl'] ??
+              raw['url'] ??
+              raw['link'] ??
+              raw['source'] ??
+              '',
+          'Shopify':
+              raw['Shopify'] ??
+              raw['shopify'] ??
+              raw['ShopifyLink'] ??
+              raw['shopify_link'] ??
+              null,
+        };
+        print('✅ Returning normalized google result (from map): $normalized');
+        return normalized;
+      }
+
+      try {
+        return Map<String, dynamic>.from(json.decode(response.body));
+      } catch (_) {
+        return null;
+      }
+    } catch (e) {
+      print('❌ Error calling google_search: $e');
+      return null;
     }
   }
 

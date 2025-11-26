@@ -2,10 +2,20 @@ import 'dart:convert';
 import 'dart:math';
 import 'models.dart';
 import 'outfit_generator.dart';
-import 'color_utils.dart';
+// color utilities were previously used but selection logic moved into this file
 import 'network_manager.dart';
 
 class RecommendationEngine {
+  // Simple in-memory cache to avoid redundant remote calls during a session.
+  // Key format: '<styleType>|<missingType>|<r>,<g>,<b>'
+  static final Map<String, List<Map<String, dynamic>>>
+  _remoteRecommendationCache = {};
+
+  /// Clears the in-memory recommendation cache.
+  static void clearCache() {
+    _remoteRecommendationCache.clear();
+  }
+
   static Future<List<MissingPieceRecommendation>> generateRecommendations(
     List<Clothing> allClothes,
     StyleProfile userStyle, {
@@ -15,8 +25,16 @@ class RecommendationEngine {
     final recommendations = <MissingPieceRecommendation>[];
     final random = Random();
 
-    final optionalTypes = ['footwear', 'outerwear', 'headwear', 'accessory'];
-    
+    final optionalTypes = [
+      'footwear',
+      'outerwear',
+      'headwear',
+      'accessory',
+      'sweater',
+      'top',
+      'bottom',
+    ];
+
     final byType = <String, List<Clothing>>{};
     for (final item in allClothes) {
       byType.putIfAbsent(item.type.toLowerCase(), () => []).add(item);
@@ -29,248 +47,336 @@ class RecommendationEngine {
     var attempts = 0;
     const maxAttempts = 100;
 
-    while (recommendations.length < maxRecommendations && attempts < maxAttempts) {
+    final desiredRecommendations = 1;
+
+    while (recommendations.length < desiredRecommendations &&
+        attempts < maxAttempts) {
       attempts++;
 
       final missingType = optionalTypes[random.nextInt(optionalTypes.length)];
-      
+
       final fullOutfit = <Clothing>[];
-      
-      if (byType['top']!.isNotEmpty) {
-        fullOutfit.add(byType['top']![random.nextInt(byType['top']!.length)]);
-      }
-      
-      if (byType['bottom']!.isNotEmpty) {
-        fullOutfit.add(byType['bottom']![random.nextInt(byType['bottom']!.length)]);
-      }
-      
-      for (final type in byType.keys) {
-        if (type != 'top' && type != 'bottom' && type != missingType) {
-          if (byType[type]!.isNotEmpty && random.nextDouble() > 0.3) {
-            fullOutfit.add(byType[type]![random.nextInt(byType[type]!.length)]);
-          }
+
+      if (missingType != 'top') {
+        if (byType['top'] != null && byType['top']!.isNotEmpty) {
+          fullOutfit.add(byType['top']![random.nextInt(byType['top']!.length)]);
+        } else {
+          continue;
         }
       }
 
-      if (fullOutfit.length < 2) continue;
+      if (missingType != 'bottom') {
+        if (byType['bottom'] != null && byType['bottom']!.isNotEmpty) {
+          fullOutfit.add(
+            byType['bottom']![random.nextInt(byType['bottom']!.length)],
+          );
+        } else {
+          continue;
+        }
+      }
 
-      
-      final currentResult = OutfitGenerator.evaluateOutfitWithWeights(fullOutfit, boldMode: boldMode);
+      if (missingType != 'footwear') {
+        if (byType['footwear'] != null && byType['footwear']!.isNotEmpty) {
+          fullOutfit.add(
+            byType['footwear']![random.nextInt(byType['footwear']!.length)],
+          );
+        } else {
+          continue;
+        }
+      }
+
+      for (final type in byType.keys) {
+        final t = type.toLowerCase();
+        if (t == 'top' || t == 'bottom' || t == missingType || t == 'footwear')
+          continue;
+        if (byType[t]!.isNotEmpty && random.nextDouble() > 0.3) {
+          fullOutfit.add(byType[t]![random.nextInt(byType[t]!.length)]);
+        }
+      }
+
+      final currentResult = OutfitGenerator.evaluateOutfitWithWeights(
+        fullOutfit,
+        boldMode: boldMode,
+      );
       final currentScore = 100 - currentResult.score;
 
-      
       if (currentScore < 70 || currentScore > 90) continue;
 
-      
-      final targetColor = _findMissingColorForPerfectRecall(fullOutfit);
-      
-      if (targetColor == null) continue;
+      // Determine primary and secondary target colors from the outfit to request
+      // recommendations that include a primary color and an accent color.
+      final existingColors = <ColorInfo>[];
+      for (final item in fullOutfit) {
+        for (final c in item.colors) {
+          if (c.pct >= 20) existingColors.add(c);
+        }
+      }
+
+      if (existingColors.isEmpty) continue;
+
+      // aggregate by rgb key and sum pct
+      final Map<String, int> colorAgg = {};
+      final Map<String, ColorInfo> colorMap = {};
+      for (final c in existingColors) {
+        final key = '${c.r},${c.g},${c.b}';
+        colorAgg[key] = (colorAgg[key] ?? 0) + c.pct;
+        colorMap[key] = c;
+      }
+
+      final sortedColors = colorAgg.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      final primaryKey = sortedColors.first.key;
+      final primaryColor = colorMap[primaryKey]!;
+      ColorInfo? secondaryColor;
+      if (sortedColors.length > 1) {
+        final secondKey = sortedColors[1].key;
+        secondaryColor = colorMap[secondKey];
+      }
+
+      // Build colors list with percentages. Make any accent color optional by
+      // normalizing actual prominence from the outfit and ensuring the
+      // accent (secondary) receives a small preference rather than being
+      // mandatory. This allows backend to return pieces that are neutral,
+      // neutral with a touch of accent, or fully accent-colored.
+      final colorsList = <Map<String, dynamic>>[];
+      final totalAgg = colorAgg.values.fold<int>(0, (s, v) => s + v);
+      int primaryPct = 100;
+      int? secondaryPct;
+      if (secondaryColor != null && totalAgg > 0) {
+        final secondaryAgg =
+            colorAgg["${secondaryColor.r},${secondaryColor.g},${secondaryColor.b}"] ??
+            0;
+        // compute normalized percents, but ensure secondary gets at least 5%
+        final rawSecondary = (secondaryAgg / totalAgg) * 100.0;
+        final intRawSecondary = rawSecondary.round();
+        secondaryPct = intRawSecondary.clamp(
+          5,
+          50,
+        ); // accent is optional small preference
+        primaryPct = (100 - secondaryPct).clamp(50, 95);
+        colorsList.add({
+          'r': primaryColor.r,
+          'g': primaryColor.g,
+          'b': primaryColor.b,
+          'pct': primaryPct,
+        });
+        colorsList.add({
+          'r': secondaryColor.r,
+          'g': secondaryColor.g,
+          'b': secondaryColor.b,
+          'pct': secondaryPct,
+        });
+      } else {
+        colorsList.add({
+          'r': primaryColor.r,
+          'g': primaryColor.g,
+          'b': primaryColor.b,
+          'pct': primaryPct,
+        });
+      }
+
+      final targetColor = primaryColor;
+
+      final specificType = "_unknown";
 
       List<Map<String, dynamic>> remoteItems = [];
+
       try {
-            final Map<String, dynamic> criteria = {
-              'missingType': missingType,
-            };
+        final Map<String, dynamic> criteria = {'missingType': missingType};
 
-            criteria['colors'] = [
-              {
-                'r': targetColor.r,
-                'g': targetColor.g,
-                'b': targetColor.b,
-                'pct': targetColor.pct,
-              }
-            ];
+        criteria['colors'] = colorsList;
 
-          final itemsArray = allClothes
-              .where((c) => c.type.toLowerCase() == missingType.toLowerCase())
-              .map((item) => {
-                    'brand': item.brand,
-                    'product': item.productName,
-                    'type': item.type,
-                  })
-              .toList();
+        final itemsArray = allClothes
+            .where((c) => c.type.toLowerCase() == missingType.toLowerCase())
+            .map(
+              (item) => {
+                'brand': item.brand,
+                'product': item.productName,
+                'type': item.type,
+              },
+            )
+            .toList();
 
-          criteria['User_${missingType.toLowerCase() }s'] = json.encode(itemsArray);
+        criteria['User_${missingType.toLowerCase()}s'] = json.encode(
+          itemsArray,
+        );
 
-        remoteItems = await NetworkManager().recommendClothingItems(userStyle.styleType, criteria);
+        final colorKey = '${targetColor.r},${targetColor.g},${targetColor.b}';
+        final cacheKey =
+            '${userStyle.styleType}|${missingType.toLowerCase()}|$colorKey';
+
+        if (_remoteRecommendationCache.containsKey(cacheKey)) {
+          remoteItems = _remoteRecommendationCache[cacheKey]!;
+        } else {
+          remoteItems = await NetworkManager().recommendClothingItems(
+            userStyle.styleType,
+            criteria,
+          );
+          _remoteRecommendationCache[cacheKey] = remoteItems;
+        }
       } catch (e) {
         remoteItems = [];
       }
 
+      List<String> suggestedBrands = [];
       String reason = 'Recommended based on your style';
-      double potentialScore = min(98.0, currentScore + 15 + random.nextDouble() * 10);
+      double potentialScore = min(
+        98.0,
+        currentScore + 15 + random.nextDouble() * 10,
+      );
 
       if (remoteItems.isNotEmpty) {
         final first = remoteItems.first;
         if (first['colors'] != null) {
           final colorField = first['colors'] as String;
           final firstColor = colorField.split(';').first.trim();
-          final vals = firstColor.split(',').map((s) => int.tryParse(s.trim()) ?? 0).toList();
+          final vals = firstColor
+              .split(',')
+              .map((s) => int.tryParse(s.trim()) ?? 0)
+              .toList();
           if (vals.length >= 3) {
-            final remoteColor = ColorInfo(r: vals[0], g: vals[1], b: vals[2], pct: 100);
+            final remoteColor = ColorInfo(
+              r: vals[0],
+              g: vals[1],
+              b: vals[2],
+              pct: 100,
+            );
+            final colorsForKeywords = <ColorInfo>[remoteColor];
+            if (secondaryColor != null) colorsForKeywords.add(secondaryColor);
+            Map<String, dynamic>? googleResultForFirst;
+            try {
+              final searchPayloadFirst = {
+                'product':
+                    first['product'] ?? first['specificType'] ?? missingType,
+                'brand': (first['brand'] is String)
+                    ? first['brand']
+                    : (first['brand'] is List && first['brand'].isNotEmpty)
+                    ? first['brand'][0]
+                    : '',
+                'colors': colorsForKeywords
+                    .map((c) => {'r': c.r, 'g': c.g, 'b': c.b})
+                    .toList(),
+              };
+              googleResultForFirst = await NetworkManager().googleSearch(
+                searchPayloadFirst,
+              );
+            } catch (_) {
+              googleResultForFirst = null;
+            }
+
             final recommendation = MissingPieceRecommendation(
               type: missingType,
-              specificType: first['specificType'],
-              suggestedBrands: first['brand'],
+              product: first['product'] ?? "unknown",
+              specificType: first['specificType'] ?? "unknown",
+              suggestedBrands: first['brand'] != null
+                  ? (first['brand'] is List
+                        ? List<String>.from(
+                            (first['brand'] as List).map(
+                              (e) => e.toString().toLowerCase(),
+                            ),
+                          )
+                        : [(first['brand'] as String).toLowerCase()])
+                  : suggestedBrands,
               targetColor: remoteColor,
               existingOutfit: fullOutfit,
               currentScore: currentScore,
               potentialScore: potentialScore,
               reason: first['reason'] ?? reason,
               searchKeywords: [],
+              googleName: googleResultForFirst != null
+                  ? (googleResultForFirst['Name'])
+                  : null,
+              googleImageUrl: googleResultForFirst != null
+                  ? (googleResultForFirst['ImageURL'])
+                  : null,
+              googleUrl: googleResultForFirst != null
+                  ? (googleResultForFirst['url'])
+                  : null,
             );
 
-            final isDuplicate = recommendations.any((r) =>
-              r.type == recommendation.type &&
-              r.targetColor.r == recommendation.targetColor.r &&
-              r.targetColor.g == recommendation.targetColor.g &&
-              r.targetColor.b == recommendation.targetColor.b);
+            final isDuplicate = recommendations.any(
+              (r) =>
+                  r.type == recommendation.type &&
+                  r.targetColor.r == recommendation.targetColor.r &&
+                  r.targetColor.g == recommendation.targetColor.g &&
+                  r.targetColor.b == recommendation.targetColor.b,
+            );
 
             if (!isDuplicate) recommendations.add(recommendation);
             continue;
           }
         }
+        final colorsForKeywords = <ColorInfo>[targetColor];
+        if (secondaryColor != null) colorsForKeywords.add(secondaryColor);
+
+        Map<String, dynamic>? googleResult;
+        try {
+          final searchPayload = {
+            'product':
+                remoteItems.first['product'] ??
+                remoteItems.first['specificType'] ??
+                missingType,
+            'brand': (remoteItems.first['brand'] is String)
+                ? remoteItems.first['brand']
+                : (remoteItems.first['brand'] is List &&
+                      remoteItems.first['brand'].isNotEmpty)
+                    ? remoteItems.first['brand'][0]
+                    : '',
+            'colors': colorsForKeywords
+                .map((c) => {'r': c.r, 'g': c.g, 'b': c.b})
+                .toList(),
+          };
+          googleResult = await NetworkManager().googleSearch(searchPayload);
+          print('🔔 googleResult for $missingType -> $googleResult');
+          if (googleResult == null) {
+            print('🔕 googleResult is null for $missingType');
+          } else {
+            print('🔎 googleResult keys: ${googleResult.keys.toList()}');
+          }
+        } catch (e) {
+          print('Google search failed for $missingType: $e');
+          googleResult = null;
+        }
+
         final recommendation = MissingPieceRecommendation(
           type: missingType,
-          specificType: remoteItems.first['specificType'],
-          suggestedBrands: remoteItems.first['brand'],
+          product: remoteItems.first['product'] ?? "unknown",
+          specificType: remoteItems.first['specificType'] ?? specificType,
+          suggestedBrands: remoteItems.first['brand'] != null
+              ? (remoteItems.first['brand'] is List
+                    ? List<String>.from(
+                        (remoteItems.first['brand'] as List).map(
+                          (e) => e.toString().toLowerCase(),
+                        ),
+                      )
+                    : [(remoteItems.first['brand'] as String).toLowerCase()])
+              : suggestedBrands,
           targetColor: targetColor,
           existingOutfit: fullOutfit,
           currentScore: currentScore,
           potentialScore: potentialScore,
           reason: remoteItems.first['reason'] ?? reason,
           searchKeywords: [],
+          googleName: googleResult != null
+              ? (googleResult['Name'])
+              : remoteItems.first['product'],
+          googleImageUrl: googleResult != null
+              ? googleResult['ImageURL']
+              : null,
+          googleUrl: googleResult != null ? googleResult['url'] : null,
         );
 
-        final isDuplicate = recommendations.any((r) =>
-          r.type == recommendation.type &&
-          r.targetColor.r == recommendation.targetColor.r &&
-          r.targetColor.g == recommendation.targetColor.g &&
-          r.targetColor.b == recommendation.targetColor.b);
+        final isDuplicate = recommendations.any(
+          (r) =>
+              r.type == recommendation.type &&
+              r.targetColor.r == recommendation.targetColor.r &&
+              r.targetColor.g == recommendation.targetColor.g &&
+              r.targetColor.b == recommendation.targetColor.b,
+        );
 
         if (!isDuplicate) recommendations.add(recommendation);
         continue;
       }
     }
     return recommendations;
-  }
-  
-  static ColorInfo? _findMissingColorForPerfectRecall(List<Clothing> outfit) {
-
-    final existingColors = <ColorInfo>[];
-    for (final item in outfit) {
-      for (final color in item.colors) {
-        if (color.pct >= 20) {
-          existingColors.add(color);
-        }
-      }
-    }
-
-    if (existingColors.isEmpty) return null;
-
-    for (final color in existingColors) {
-      if (color.pct >= 20 && color.pct <= 40) {
-        
-        final r = color.r / 255.0;
-        final g = color.g / 255.0;
-        final b = color.b / 255.0;
-        
-        if (!isNeutral(r, g, b)) {
-          return ColorInfo(r: color.r, g: color.g, b: color.b, pct: 100);
-        }
-      }
-    }
-
-    
-    final dominantColor = existingColors.reduce((a, b) => a.pct > b.pct ? a : b);
-    final hsl = rgbToHsl(
-      dominantColor.r / 255.0,
-      dominantColor.g / 255.0,
-      dominantColor.b / 255.0,
-    );
-    
-    
-    var complementaryHue = (hsl.h + 180) % 360;
-    final complementaryRgb = hslToRgb(complementaryHue, hsl.s, hsl.l);
-    
-    return ColorInfo(
-      r: (complementaryRgb.$1 * 255).round(),
-      g: (complementaryRgb.$2 * 255).round(),
-      b: (complementaryRgb.$3 * 255).round(),
-      pct: 100,
-    );
-  }
-
-  static List<String> _suggestBrands(String type, StyleProfile userStyle) {
-    final suggestions = <String>[];
-
-    if (userStyle.topBrands.isNotEmpty) {
-      suggestions.addAll(userStyle.topBrands.take(2));
-    }
-
-    return suggestions.toSet().take(3).toList();
-  }
-
-  static String _getColorName(ColorInfo color) {
-    final r = color.r;
-    final g = color.g;
-    final b = color.b;
-
-    if (r < 50 && g < 50 && b < 50) return 'noir';
-    
-    if (r > 200 && g > 200 && b > 200) return 'blanc';
-    
-    // Gris
-    if ((r - g).abs() < 30 && (g - b).abs() < 30 && (r - b).abs() < 30) {
-      return 'gris';
-    }
-
-    // Rouge
-    if (r > g + 50 && r > b + 50) return 'rouge';
-    
-    // Bleu
-    if (b > r + 50 && b > g + 50) return 'bleu';
-    
-    // Vert
-    if (g > r + 50 && g > b + 50) return 'vert';
-    
-    // Jaune
-    if (r > 200 && g > 200 && b < 100) return 'jaune';
-    
-    // Orange
-    if (r > 200 && g > 100 && g < 200 && b < 100) return 'orange';
-    
-    // Rose
-    if (r > 200 && g < 150 && b > 150) return 'rose';
-    
-    // Violet
-    if (r > 100 && b > 100 && g < 100) return 'violet';
-    
-    // Marron
-    if (r > 100 && g > 50 && b < 100) return 'marron';
-    
-    return 'coloré';
-  }
-
-  static List<String> _generateSearchKeywords(
-    String type,
-    String specificType,
-    ColorInfo color,
-    List<String> brands,
-  ) {
-    final keywords = <String>[];
-    
-    keywords.add(specificType);
-    
-    final colorName = _getColorName(color);
-    keywords.add(colorName);
-    keywords.add('$specificType $colorName');
-    
-    if (brands.isNotEmpty) {
-      keywords.add('${brands.first} $specificType');
-      keywords.add('${brands.first} $colorName');
-    }
-    
-    return keywords.take(5).toList();
   }
 }

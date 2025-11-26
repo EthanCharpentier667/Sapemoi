@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:ui';
 import '../models.dart';
 import '../recommendation_engine.dart';
+import '../db_manager.dart';
+import '../auth_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class RecommendationsPage extends StatefulWidget {
@@ -23,6 +26,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   List<MissingPieceRecommendation> recommendations = [];
   bool isGenerating = false;
   StyleProfile? userStyle;
+  DateTime? _lastGeneratedAt;
+  int _generationCounter = 0;
 
   @override
   void initState() {
@@ -35,21 +40,57 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       return;
     }
 
-    setState(() => isGenerating = true);
+    if (isGenerating) return;
+    if (_lastGeneratedAt != null && DateTime.now().difference(_lastGeneratedAt!) < const Duration(seconds: 3)) return;
 
-    userStyle = await StyleProfile.fromClothes(widget.clothes);
+    _lastGeneratedAt = DateTime.now();
+    _generationCounter++;
+    final myGeneration = _generationCounter;
 
-    final recs = await RecommendationEngine.generateRecommendations(
-      widget.clothes,
-      userStyle!,
-      maxRecommendations: 5,
-      boldMode: false,
-    );
+    if (mounted) setState(() => isGenerating = true);
 
-    setState(() {
-      recommendations = recs;
-      isGenerating = false;
-    });
+    try {
+      final local = await AuthManager().getLocalUser();
+      if (local != null) {
+        final stored = await DBManager().getUserStyle(local.uid);
+        if (stored != null) {
+          userStyle = stored;
+        } else {
+          userStyle = await StyleProfile.fromClothes(widget.clothes);
+          await DBManager().saveUserStyle(local.uid, userStyle!);
+        }
+      } else {
+        userStyle = await StyleProfile.fromClothes(widget.clothes);
+      }
+
+      final recs = await RecommendationEngine.generateRecommendations(
+        widget.clothes,
+        userStyle!,
+        maxRecommendations: 1,
+        boldMode: false,
+      );
+
+      // If another generation started or widget disposed, don't call setState
+      if (myGeneration != _generationCounter) return;
+      if (!mounted) return;
+
+      setState(() {
+        recommendations = recs;
+        isGenerating = false;
+      });
+    } catch (e) {
+      // Avoid calling setState after dispose
+      if (mounted) {
+        setState(() => isGenerating = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error generating recommendations: $e')));
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _generationCounter++;
+    super.dispose();
   }
 
   Future<void> _openSearchLink(String url) async {
@@ -181,7 +222,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header avec score
+          // Header with title and scores
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -200,51 +241,23 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        _capitalizeFirst(rec.specificType),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                      InkWell(
+                        onTap: () {
+                          if (rec.googleUrl != null && rec.googleUrl!.isNotEmpty) _openSearchLink(rec.googleUrl!);
+                        },
+                        child: Text(
+                          rec.product,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Row(
                         children: [
-                          Text(
-                            '${rec.currentScore.toInt()}%',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.white70,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const Icon(Icons.arrow_forward, color: Colors.white70, size: 16),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${rec.potentialScore.toInt()}%',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          Text('${rec.currentScore.toInt()}%', style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
                           const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '+${(rec.potentialScore - rec.currentScore).toInt()}%',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
+                          const Icon(Icons.arrow_forward, color: Colors.white70, size: 16),
+                          const SizedBox(width: 8),
+                          Text('${rec.potentialScore.toInt()}%', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
                         ],
                       ),
                     ],
@@ -254,162 +267,116 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             ),
           ),
 
+          // Reason
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
+            padding: const EdgeInsets.all(12),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(rec.reason, style: TextStyle(color: Colors.blue.shade900, fontSize: 13))),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Suggested brands
+          if (rec.suggestedBrands.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Suggested brands:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, runSpacing: 8, children: rec.suggestedBrands.map((b) => Chip(label: Text(_capitalizeFirst(b)), backgroundColor: Colors.purple.shade50,)).toList()),
+                ],
+              ),
+            ),
+
+          const SizedBox(height: 12),
+
+          // Large preview + outfit thumbnails
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Couleur cible
-                Row(
-                  children: [
-                    const Text(
-                      'Target color:',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                GestureDetector(
+                  onTap: () {
+                    if (rec.googleUrl != null && rec.googleUrl!.isNotEmpty) _openSearchLink(rec.googleUrl!);
+                  },
+                  child: Container(
+                    width: 140,
+                    height: 140,
+                    margin: const EdgeInsets.only(right: 12),
+                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300), color: Colors.grey.shade100),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: rec.googleImageUrl != null
+                          ? Image.network(
+                              rec.googleImageUrl!,
+                              fit: BoxFit.cover,
+                              loadingBuilder: (context, child, loadingProgress) => loadingProgress == null ? child : const Center(child: CircularProgressIndicator()),
+                              errorBuilder: (c, e, s) => _fallbackPreview(rec),
+                            )
+                          : _fallbackPreview(rec),
                     ),
-                    const SizedBox(width: 12),
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Color.fromRGBO(
-                          rec.targetColor.r,
-                          rec.targetColor.g,
-                          rec.targetColor.b,
-                          1,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.shade300, width: 2),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'RGB(${rec.targetColor.r}, ${rec.targetColor.g}, ${rec.targetColor.b})',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                    ),
-                  ],
+                  ),
                 ),
 
-                const SizedBox(height: 16),
-
-                // Raison
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
+                // Thumbnails
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          rec.reason,
-                          style: TextStyle(
-                            color: Colors.blue.shade900,
-                            fontSize: 13,
-                          ),
+                      const Text('With this outfit:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 80,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: rec.existingOutfit.length,
+                          itemBuilder: (context, index) {
+                            final item = rec.existingOutfit[index];
+                            return Container(
+                              width: 70,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade300)),
+                              child: ClipRRect(borderRadius: BorderRadius.circular(8), child: item.imageBase64 != null ? Image.memory(base64Decode(item.imageBase64!), fit: BoxFit.cover) : Image.file(File(item.imagePath), fit: BoxFit.cover)),
+                            );
+                          },
                         ),
                       ),
                     ],
                   ),
                 ),
-
-                const SizedBox(height: 16),
-
-                // Suggested brands
-                if (rec.suggestedBrands.isNotEmpty) ...[
-                  const Text(
-                    'Suggested brands:',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: rec.suggestedBrands.map((brand) {
-                      return Chip(
-                        label: Text(_capitalizeFirst(brand)),
-                        backgroundColor: Colors.purple.shade50,
-                        labelStyle: TextStyle(color: Colors.purple.shade700),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
-                // Outfit existant (aperçu)
-                const Text(
-                  'With this outfit:',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 80,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: rec.existingOutfit.length,
-                    itemBuilder: (context, index) {
-                      final item = rec.existingOutfit[index];
-                      return Container(
-                        width: 70,
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: item.imageBase64 != null
-                              ? Image.memory(
-                                  base64Decode(item.imageBase64!),
-                                  fit: BoxFit.cover,
-                                )
-                              : Image.file(
-                                  File(item.imagePath),
-                                  fit: BoxFit.cover,
-                                ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Liens de recherche
-                const Text(
-                  'Where to buy:',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _buildSearchButton(
-                      'Vinted',
-                      Icons.shopping_bag,
-                      Colors.teal,
-                      () => _openSearchLink(_generateVintedUrl(rec)),
-                    ),
-                    _buildSearchButton(
-                      'Google',
-                      Icons.search,
-                      Colors.blue,
-                      () => _openSearchLink(_generateGoogleUrl(rec)),
-                    ),
-                    _buildSearchButton(
-                      'eBay',
-                      Icons.store,
-                      Colors.red,
-                      () => _openSearchLink(_generateEbayUrl(rec)),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
+
+          const SizedBox(height: 12),
+
+          // Where to buy buttons
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildSearchButton('Vinted', Icons.shopping_bag, Colors.teal, () => _openSearchLink(_generateVintedUrl(rec))),
+                _buildSearchButton('Google', Icons.search, Colors.blue, () => _openSearchLink(_generateGoogleUrl(rec))),
+                _buildSearchButton('eBay', Icons.store, Colors.red, () => _openSearchLink(_generateEbayUrl(rec))),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
         ],
       ),
     );
@@ -434,6 +401,45 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     );
   }
 
+  Widget _fallbackPreview(MissingPieceRecommendation rec) {
+    // If there's an outfit image, use it and apply a blur to give a
+    // soft fallback preview; otherwise render a blurred gradient placeholder.
+    if (rec.existingOutfit.isNotEmpty) {
+      final item = rec.existingOutfit.first;
+      if (item.imageBase64 != null) {
+        final img = Image.memory(base64Decode(item.imageBase64!), fit: BoxFit.cover);
+        return ImageFiltered(
+          imageFilter: ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
+          child: img,
+        );
+      }
+      try {
+        final img = Image.file(File(item.imagePath), fit: BoxFit.cover);
+        return ImageFiltered(
+          imageFilter: ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
+          child: img,
+        );
+      } catch (_) {
+        // fallthrough to gradient placeholder
+      }
+    }
+
+    final placeholder = Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.grey.shade300, Colors.grey.shade200],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+    );
+
+    return ImageFiltered(
+      imageFilter: ImageFilter.blur(sigmaX: 4.0, sigmaY: 4.0),
+      child: placeholder,
+    );
+  }
+
   String _generateVintedUrl(MissingPieceRecommendation rec) {
     final query = rec.searchKeywords.isNotEmpty
         ? rec.searchKeywords.first
@@ -442,10 +448,10 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   }
 
   String _generateGoogleUrl(MissingPieceRecommendation rec) {
-    final query = rec.searchKeywords.isNotEmpty
-        ? rec.searchKeywords.first
-        : '${rec.suggestedBrands.isNotEmpty ? rec.suggestedBrands.first : ''} ${rec.specificType}';
-    return 'https://www.google.com/search?tbm=shop&q=${Uri.encodeComponent(query)}';
+    final query = '${rec.suggestedBrands.isNotEmpty ? rec.suggestedBrands.first : ''} ${rec.specificType}';
+    return rec.googleUrl != null && rec.googleUrl!.isNotEmpty
+        ? rec.googleUrl!
+        : 'https://www.google.com/search?tbm=shop&q=${Uri.encodeComponent(query)}';
   }
 
   String _generateEbayUrl(MissingPieceRecommendation rec) {

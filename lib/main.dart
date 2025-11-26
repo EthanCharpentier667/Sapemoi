@@ -4,8 +4,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
 import 'models.dart';
 import 'db_manager.dart';
+import 'auth_manager.dart';
 import 'network_manager.dart';
 import 'pages/login_page.dart';
 import 'pages/profile_page.dart';
@@ -34,22 +36,7 @@ class SapemoiApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.purple),
         useMaterial3: true,
       ),
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
-          
-          if (snapshot.hasData) {
-            return const ContentView();
-          }
-          
-          return const LoginPage();
-        },
-      ),
+      home: const AuthGate(),
       routes: {
         '/login': (context) => const LoginPage(),
         '/home': (context) => const ContentView(),
@@ -65,6 +52,72 @@ class ContentView extends StatefulWidget {
 
   @override
   State<ContentView> createState() => _ContentViewState();
+}
+
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+enum _AuthStatus { loading, signedOut, signedIn }
+
+class _AuthGateState extends State<AuthGate> {
+  _AuthStatus _status = _AuthStatus.loading;
+  late final Stream<User?> _authStream;
+  late final StreamSubscription<User?> _sub;
+  String? _lastCheckedUid;
+
+  @override
+  void initState() {
+    super.initState();
+    _authStream = FirebaseAuth.instance.authStateChanges();
+    _sub = _authStream.listen(_onAuthChanged);
+  }
+
+  Future<void> _onAuthChanged(User? user) async {
+    if (!mounted) return;
+    if (user == null) {
+      _lastCheckedUid = null;
+      setState(() => _status = _AuthStatus.signedOut);
+      return;
+    }
+
+    // Skip if we already verified this UID (avoid repeated upserts)
+    if (_lastCheckedUid == user.uid && _status == _AuthStatus.signedIn) {
+      return;
+    }
+
+    setState(() => _status = _AuthStatus.loading);
+    _lastCheckedUid = user.uid;
+    
+    // Ensure remote profile exists (getLocalUser will attempt upsert if missing)
+    final remote = await AuthManager().getLocalUser();
+    if (remote == null) {
+      // No remote profile -> treat as signed out and navigate to login
+      setState(() => _status = _AuthStatus.signedOut);
+    } else {
+      setState(() => _status = _AuthStatus.signedIn);
+    }
+  }
+
+  @override
+  void dispose() {
+    _sub.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_status == _AuthStatus.loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (_status == _AuthStatus.signedIn) {
+      return const ContentView();
+    }
+    return const LoginPage();
+  }
 }
 
 class _ContentViewState extends State<ContentView> {
@@ -157,10 +210,10 @@ class _ContentViewState extends State<ContentView> {
 
   // MARK: - Methods
   Future<void> _loadClothes() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    
-    final loaded = await DBManager().getAllClothes(user.uid);
+    final userModel = await AuthManager().getLocalUser();
+    if (userModel == null) return;
+
+    final loaded = await DBManager().getAllClothes(userModel.uid);
     setState(() {
       clothes = loaded;
     });
@@ -170,8 +223,8 @@ class _ContentViewState extends State<ContentView> {
   Future<void> _addClothing() async {
     if (pickedImageBase64 == null || pickedImageFile == null) return;
     
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    final userModel = await AuthManager().getLocalUser();
+    if (userModel == null) return;
 
     setState(() => analyzing = true);
 
@@ -191,7 +244,7 @@ class _ContentViewState extends State<ContentView> {
         createdAt: DateTime.now(),
       );
 
-      await DBManager().addClothing(clothing, user.uid);
+      await DBManager().addClothing(clothing, userModel.uid);
       await _loadClothes();
 
       setState(() {

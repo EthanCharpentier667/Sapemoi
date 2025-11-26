@@ -3,9 +3,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
 import 'dart:io';
 import '../auth_manager.dart';
+import '../user_model.dart';
 import '../db_manager.dart';
 import '../network_manager.dart';
 import '../models.dart';
+import '../recommendation_engine.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -18,6 +20,10 @@ class _ProfilePageState extends State<ProfilePage> {
   List<Clothing> _clothes = [];
   double? _wardrobeValue;
   bool _loadingValue = false;
+  StyleProfile? _storedStyle;
+  bool _loadingStyle = false;
+  bool _loadingUser = true;
+  UserModel? _userModel;
 
   @override
   void initState() {
@@ -26,28 +32,57 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadData() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    setState(() => _loadingUser = true);
+    final userModel = await AuthManager().getLocalUser();
+    if (userModel == null) {
+      setState(() => _loadingUser = false);
+      return;
+    }
 
-    final clothes = await DBManager().getAllClothes(user.uid);
-    final total = await DBManager().getTotalWardrobeValue(user.uid);
-    
+    final clothes = await DBManager().getAllClothes(userModel.uid);
+    final total = await DBManager().getTotalWardrobeValue(userModel.uid);
+    final stored = await DBManager().getUserStyle(userModel.uid);
     setState(() {
+      _userModel = userModel;
       _clothes = clothes;
+      _storedStyle = stored;
       if (total > 0) {
         _wardrobeValue = total;
       }
+      _loadingUser = false;
     });
   }
 
+  Future<void> _estimateStyle() async {
+    final userModel = await AuthManager().getLocalUser();
+    if (userModel == null) return;
+
+    setState(() => _loadingStyle = true);
+    try {
+      final clothes = await DBManager().getAllClothes(userModel.uid);
+      final profile = await StyleProfile.fromClothes(clothes);
+      await DBManager().saveUserStyle(userModel.uid, profile);
+      RecommendationEngine.clearCache();
+      setState(() {
+        _storedStyle = profile;
+        _loadingStyle = false;
+      });
+    } catch (e) {
+      setState(() => _loadingStyle = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error estimating style: $e')));
+      }
+    }
+  }
+
   Future<void> _estimateWardrobeValue() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    final userModel = await AuthManager().getLocalUser();
+    if (userModel == null) return;
 
     setState(() => _loadingValue = true);
 
     try {
-      final unvaluedIds = await DBManager().getUnvaluedClothingIds(user.uid);
+      final unvaluedIds = await DBManager().getUnvaluedClothingIds(userModel.uid);
       
       if (unvaluedIds.isNotEmpty) {
         final unvaluedItems = _clothes.where((c) => unvaluedIds.contains(c.id)).map((c) => {
@@ -69,7 +104,7 @@ class _ProfilePageState extends State<ProfilePage> {
         }
       }
       
-      final total = await DBManager().getTotalWardrobeValue(user.uid);
+      final total = await DBManager().getTotalWardrobeValue(userModel.uid);
       await _loadData();
       
       setState(() {
@@ -88,14 +123,21 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final userModel = _userModel;
 
-    if (user == null) {
+    if (_loadingUser) {
       return const Scaffold(
-        body: Center(child: Text('No user logged in')),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
+    if (userModel == null) {
+      // No remote profile: redirect to login screen
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).pushReplacementNamed('/login');
+      });
+      return const Scaffold();
+    }
     final mostWorn = [..._clothes]..sort((a, b) => b.wearCount.compareTo(a.wearCount));
     final leastWorn = [..._clothes]..sort((a, b) => a.wearCount.compareTo(b.wearCount));
 
@@ -116,16 +158,16 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 20),
             CircleAvatar(
               radius: 60,
-              backgroundImage: user.photoURL != null
-                  ? NetworkImage(user.photoURL!)
-                  : null,
-              child: user.photoURL == null
-                  ? const Icon(Icons.person, size: 60)
-                  : null,
+              backgroundImage: userModel.photoURL != null
+                ? NetworkImage(userModel.photoURL!)
+                : null,
+              child: userModel.photoURL == null
+                ? const Icon(Icons.person, size: 60)
+                : null,
             ),
             const SizedBox(height: 24),
             Text(
-              user.displayName ?? 'Anonymous',
+              userModel.displayName ?? 'Anonymous',
               style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -133,7 +175,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SizedBox(height: 8),
             Text(
-              user.email ?? '',
+              userModel.email,
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey[600],
@@ -177,6 +219,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 )
                               : Text(_wardrobeValue == null ? 'Estimate' : 'Re-estimate'),
                         ),
+                        // style estimation button moved below into its own card to avoid layout overflow
                       ],
                     ),
                     if (_wardrobeValue != null) ...[
@@ -208,7 +251,8 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             
             const SizedBox(height: 24),
-            
+
+            // Style summary card (placed under the wardrobe value card)
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(
@@ -219,6 +263,93 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (_storedStyle != null) ...[
+                      Row(
+                        children: [
+                          const Icon(Icons.palette, color: Colors.purple, size: 28),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Detected style: ${_capitalizeFirst(_storedStyle!.styleType)}',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (_storedStyle!.topBrands.isNotEmpty)
+                        Text('Favorite brands: ${_storedStyle!.topBrands.map((b) => _capitalizeFirst(b)).join(", ")}', style: TextStyle(color: Colors.grey[700])),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: _loadingStyle ? null : _estimateStyle,
+                        icon: _loadingStyle
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.style),
+                        label: Text(_storedStyle == null ? 'Estimate Style' : 'Re-estimate Style'),
+                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+                      ),
+                      const SizedBox(height: 12),
+                    ] else ...[
+                      Row(
+                        children: [
+                          const Icon(Icons.palette, color: Colors.purple, size: 28),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'No style estimated yet',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: _loadingStyle ? null : _estimateStyle,
+                            icon: _loadingStyle
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.style),
+                            label: const Text('Estimate Style'),
+                            style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_storedStyle != null) ...[
+                      Row(
+                        children: [
+                          const Icon(Icons.palette, color: Colors.purple, size: 28),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Detected style: ${_capitalizeFirst(_storedStyle!.styleType)}',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (_storedStyle!.topBrands.isNotEmpty)
+                        Text('Favorite brands: ${_storedStyle!.topBrands.map((b) => _capitalizeFirst(b)).join(", ")}', style: TextStyle(color: Colors.grey[700])),
+                      const SizedBox(height: 8),
+                    ],
                     const Row(
                       children: [
                         Icon(Icons.star, color: Colors.amber, size: 32),
@@ -384,22 +515,22 @@ class _ProfilePageState extends State<ProfilePage> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    _buildInfoRow(
+                      _buildInfoRow(
                       icon: Icons.email,
                       label: 'Email',
-                      value: user.email ?? 'N/A',
+                      value: userModel.email,
                     ),
                     const Divider(height: 32),
                     _buildInfoRow(
                       icon: Icons.badge,
                       label: 'User ID',
-                      value: '${user.uid.substring(0, 12)}...',
+                      value: '${userModel.uid.substring(0, 12)}...',
                     ),
                     const Divider(height: 32),
                     _buildInfoRow(
                       icon: Icons.verified_user,
                       label: 'Email Verified',
-                      value: user.emailVerified ? 'Yes' : 'No',
+                      value: (FirebaseAuth.instance.currentUser?.emailVerified ?? false) ? 'Yes' : 'No',
                     ),
                   ],
                 ),
@@ -459,5 +590,10 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       ],
     );
+  }
+
+  String _capitalizeFirst(String text) {
+    if (text.isEmpty) return text;
+    return text[0].toUpperCase() + text.substring(1);
   }
 }
