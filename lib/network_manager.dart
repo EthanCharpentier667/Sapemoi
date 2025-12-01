@@ -54,11 +54,14 @@ class NetworkManager {
   }
 
   Future<Map<String, dynamic>?> getUserRemote(String uid) async {
+    final stopwatch = Stopwatch()..start();
     try {
       final url = Uri.parse('$remoteApiBase/users/$uid');
       final resp = await http
           .get(url, headers: {'Content-Type': 'application/json'})
           .timeout(const Duration(seconds: 10));
+      stopwatch.stop();
+      print('⏱️ getUserRemote took ${stopwatch.elapsedMilliseconds}ms');
       if (resp.statusCode != 200) return null;
       final jsonData = json.decode(resp.body);
       if (jsonData is Map<String, dynamic>) return jsonData;
@@ -69,11 +72,14 @@ class NetworkManager {
   }
 
   Future<Map<String, dynamic>?> getUserStyleRemote(String uid) async {
+    final stopwatch = Stopwatch()..start();
     try {
       final url = Uri.parse('$remoteApiBase/users/$uid/style');
       final resp = await http
           .get(url, headers: {'Content-Type': 'application/json'})
           .timeout(const Duration(seconds: 10));
+      stopwatch.stop();
+      print('⏱️ getUserStyleRemote took ${stopwatch.elapsedMilliseconds}ms');
       if (resp.statusCode != 200) return null;
       final jsonData = json.decode(resp.body) as Map<String, dynamic>;
       final styleProfile = jsonData['styleProfile'];
@@ -119,17 +125,43 @@ class NetworkManager {
   }
 
   Future<List<Map<String, dynamic>>> getAllClothingRemote(String userId) async {
+    final stopwatch = Stopwatch()..start();
     try {
       final url = Uri.parse('$remoteApiBase/clothing/$userId');
       final resp = await http
           .get(url, headers: {'Content-Type': 'application/json'})
           .timeout(const Duration(seconds: 10));
+      stopwatch.stop();
+      print('⏱️ getAllClothingRemote took ${stopwatch.elapsedMilliseconds}ms');
       if (resp.statusCode != 200) return [];
       final jsonData = json.decode(resp.body);
       if (jsonData is List) return List<Map<String, dynamic>>.from(jsonData);
       return [];
     } catch (e) {
       return [];
+    }
+  }
+
+  Future<String?> uploadImage(String base64Image) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/upload');
+      final bytes = base64Decode(base64Image);
+      
+      final request = http.MultipartRequest('POST', url);
+      request.files.add(http.MultipartFile.fromBytes(
+        'image',
+        bytes,
+        filename: 'clothing_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      ));
+      
+      final response = await request.send().timeout(const Duration(seconds: 30));
+      if (response.statusCode != 200) return null;
+      
+      final responseBody = await response.stream.bytesToString();
+      final jsonData = json.decode(responseBody) as Map<String, dynamic>;
+      return jsonData['imageUrl'] as String?;
+    } catch (e) {
+      return null;
     }
   }
 
@@ -236,9 +268,12 @@ class NetworkManager {
   }
 
   Future<double> getTotalWardrobeValueRemote(String userId) async {
+    final stopwatch = Stopwatch()..start();
     try {
       final url = Uri.parse('$remoteApiBase/clothing/total_value/$userId');
       final resp = await http.get(url).timeout(const Duration(seconds: 10));
+      stopwatch.stop();
+      print('⏱️ getTotalWardrobeValueRemote took ${stopwatch.elapsedMilliseconds}ms');
       if (resp.statusCode != 200) return 0.0;
       final jsonData = json.decode(resp.body) as Map<String, dynamic>;
       final total = jsonData['total'];
@@ -451,13 +486,10 @@ class NetworkManager {
     String base64Image, {
     Duration timeout = const Duration(minutes: 2),
   }) async {
+    final stopwatch = Stopwatch()..start();
     try {
-      print('🔄 Preparing request to: $endpoint');
-
       final payload = {'base64': base64Image};
       final body = json.encode(payload);
-
-      print('📤 Request body size: ${body.length} bytes');
 
       final response = await http
           .post(
@@ -467,17 +499,14 @@ class NetworkManager {
           )
           .timeout(timeout);
 
+      print(body);
       print('📥 Response status: ${response.statusCode}');
-      print('📥 Raw response (${response.body.length} bytes):');
-      print(response.body);
 
       if (response.statusCode != 200) {
         throw Exception('HTTP ${response.statusCode}: ${response.body}');
       }
 
       final jsonData = json.decode(response.body) as Map<String, dynamic>;
-      print('✅ JSON parsed successfully');
-      print('JSON keys: ${jsonData.keys.join(", ")}');
 
       if (jsonData.containsKey('error')) {
         final isClothing = jsonData['isClothing'] as bool? ?? true;
@@ -494,8 +523,6 @@ class NetworkManager {
         throw Exception('Missing "choices" in response');
       }
 
-      print('✅ Found ${choices.length} choice(s)');
-
       final message = choices.first['message'] as Map<String, dynamic>?;
       final content = message?['content'] as String?;
 
@@ -503,17 +530,14 @@ class NetworkManager {
         throw Exception('Missing message or content in choices');
       }
 
-      print('✅ Content extracted: $content');
-
       final type = _parseType(content);
       final specificType = _parseSpecificType(content);
       final colors = _parseColors(content);
       final brand = _parseBrand(content);
       final product = _parseProduct(content);
 
-      print(
-        '✅ Parsed - type: $type, specificType: $specificType, colors: ${colors.length}, brand: $brand, product: $product',
-      );
+      stopwatch.stop();
+      print('⏱️ Analysis took ${stopwatch.elapsed.inSeconds}s (${stopwatch.elapsed.inMilliseconds}ms)');
 
       return AnalysisResult(
         type: type,
@@ -528,9 +552,6 @@ class NetworkManager {
     }
   }
 
-  /// Calls the /google_search endpoint with a simple payload and returns
-  /// the first result (or null). Expected payload shape:
-  /// {"product":"...","brand":"...","colors":[{"r":0,"g":0,"b":0},...]}
   Future<Map<String, dynamic>?> googleSearch(
     Map<String, dynamic> payload, {
     Duration timeout = const Duration(seconds: 30),

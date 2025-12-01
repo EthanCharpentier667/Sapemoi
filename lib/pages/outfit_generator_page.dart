@@ -1,5 +1,4 @@
-import 'dart:convert';
-import 'dart:io';
+
 
 import '../auth_manager.dart';
 import 'package:flutter/material.dart';
@@ -218,18 +217,20 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
                                               final item = outfit.outfit[i];
                                               return Container(
                                                 color: Colors.grey[100],
-                                                child: item.imageBase64 != null
-                                                    ? Image.memory(
-                                                        base64Decode(item.imageBase64!),
-                                                        fit: BoxFit.cover,
-                                                      )
-                                                    : Image.file(
-                                                        File(item.imagePath),
-                                                        fit: BoxFit.cover,
-                                                        errorBuilder: (context, error, stack) {
-                                                          return const Icon(Icons.broken_image, size: 32);
-                                                        },
-                                                      ),
+                                                child: Image.network(
+                                                  item.imageUrl,
+                                                  fit: BoxFit.cover,
+                                                  loadingBuilder: (context, child, loadingProgress) {
+                                                    if (loadingProgress == null) return child;
+                                                    return const Center(child: CircularProgressIndicator());
+                                                  },
+                                                  errorBuilder: (context, error, stackTrace) {
+                                                    return Container(
+                                                      color: Colors.grey[300],
+                                                      child: const Icon(Icons.checkroom),
+                                                    );
+                                                  },
+                                                ),
                                               );
                                             },
                                           );

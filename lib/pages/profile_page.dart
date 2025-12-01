@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'dart:convert';
-import 'dart:io';
 import '../auth_manager.dart';
 import '../user_model.dart';
 import '../db_manager.dart';
@@ -39,9 +37,16 @@ class _ProfilePageState extends State<ProfilePage> {
       return;
     }
 
-    final clothes = await DBManager().getAllClothes(userModel.uid);
-    final total = await DBManager().getTotalWardrobeValue(userModel.uid);
-    final stored = await DBManager().getUserStyle(userModel.uid);
+    final results = await Future.wait([
+      DBManager().getAllClothes(userModel.uid),
+      DBManager().getTotalWardrobeValue(userModel.uid),
+      DBManager().getUserStyle(userModel.uid),
+    ]);
+
+    final clothes = results[0] as List<Clothing>;
+    final total = results[1] as double;
+    final stored = results[2] as StyleProfile?;
+
     setState(() {
       _userModel = userModel;
       _clothes = clothes;
@@ -252,7 +257,6 @@ class _ProfilePageState extends State<ProfilePage> {
             
             const SizedBox(height: 24),
 
-            // Style summary card (placed under the wardrobe value card)
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(
@@ -270,14 +274,14 @@ class _ProfilePageState extends State<ProfilePage> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Detected style: ${_capitalizeFirst(_storedStyle!.styleType)}',
+                              'Style: ${_capitalizeFirst(_storedStyle!.styleType)}',
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       if (_storedStyle!.topBrands.isNotEmpty)
                         Text('Favorite brands: ${_storedStyle!.topBrands.map((b) => _capitalizeFirst(b)).join(", ")}', style: TextStyle(color: Colors.grey[700])),
                       const SizedBox(height: 12),
@@ -286,10 +290,10 @@ class _ProfilePageState extends State<ProfilePage> {
                         icon: _loadingStyle
                             ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                             : const Icon(Icons.style),
-                        label: Text(_storedStyle == null ? 'Estimate Style' : 'Re-estimate Style'),
+                        label: const Text('Re-estimate Style'),
                         style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
                       ),
-                      const SizedBox(height: 12),
+                      const Divider(height: 32),
                     ] else ...[
                       Row(
                         children: [
@@ -302,53 +306,18 @@ class _ProfilePageState extends State<ProfilePage> {
                               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                             ),
                           ),
-                          ElevatedButton.icon(
-                            onPressed: _loadingStyle ? null : _estimateStyle,
-                            icon: _loadingStyle
-                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Icon(Icons.style),
-                            label: const Text('Estimate Style'),
-                            style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_storedStyle != null) ...[
-                      Row(
-                        children: [
-                          const Icon(Icons.palette, color: Colors.purple, size: 28),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Detected style: ${_capitalizeFirst(_storedStyle!.styleType)}',
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
+                      ElevatedButton.icon(
+                        onPressed: _loadingStyle ? null : _estimateStyle,
+                        icon: _loadingStyle
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.style),
+                        label: const Text('Estimate Style'),
+                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
                       ),
-                      const SizedBox(height: 12),
-                      if (_storedStyle!.topBrands.isNotEmpty)
-                        Text('Favorite brands: ${_storedStyle!.topBrands.map((b) => _capitalizeFirst(b)).join(", ")}', style: TextStyle(color: Colors.grey[700])),
-                      const SizedBox(height: 8),
+                      const Divider(height: 32),
                     ],
                     const Row(
                       children: [
@@ -389,15 +358,20 @@ class _ProfilePageState extends State<ProfilePage> {
                                     ),
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(10),
-                                      child: item.imageBase64 != null
-                                          ? Image.memory(
-                                              base64Decode(item.imageBase64!),
-                                              fit: BoxFit.cover,
-                                            )
-                                          : Image.file(
-                                              File(item.imagePath),
-                                              fit: BoxFit.cover,
-                                            ),
+                                      child: Image.network(
+                                        item.imageUrl,
+                                        fit: BoxFit.cover,
+                                        loadingBuilder: (context, child, loadingProgress) {
+                                          if (loadingProgress == null) return child;
+                                          return const Center(child: CircularProgressIndicator());
+                                        },
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Container(
+                                            color: Colors.grey[300],
+                                            child: const Icon(Icons.image, size: 40),
+                                          );
+                                        },
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -478,15 +452,20 @@ class _ProfilePageState extends State<ProfilePage> {
                                     ),
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(10),
-                                      child: item.imageBase64 != null
-                                          ? Image.memory(
-                                              base64Decode(item.imageBase64!),
-                                              fit: BoxFit.cover,
-                                            )
-                                          : Image.file(
-                                              File(item.imagePath),
-                                              fit: BoxFit.cover,
-                                            ),
+                                      child: Image.network(
+                                        item.imageUrl,
+                                        fit: BoxFit.cover,
+                                        loadingBuilder: (context, child, loadingProgress) {
+                                          if (loadingProgress == null) return child;
+                                          return const Center(child: CircularProgressIndicator());
+                                        },
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Container(
+                                            color: Colors.grey[300],
+                                            child: const Icon(Icons.image, size: 40),
+                                          );
+                                        },
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -539,6 +518,7 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 32),
             ElevatedButton(
               onPressed: () async {
+                RecommendationEngine.clearCache();
                 await AuthManager().signOut();
                 if (context.mounted) {
                   Navigator.of(context).pushReplacementNamed('/login');

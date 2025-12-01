@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 
 import '../auth_manager.dart';
@@ -245,19 +243,24 @@ class _CreateOutfitPageState extends State<CreateOutfitPage> {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(14),
-                        child: item.imageBase64 != null
-                            ? Image.memory(
-                                base64Decode(item.imageBase64!),
-                                fit: BoxFit.cover,
-                                width: 100,
-                                height: 100,
-                              )
-                            : Image.file(
-                                File(item.imagePath),
-                                fit: BoxFit.cover,
-                                width: 100,
-                                height: 100,
-                              ),
+                        child: Image.network(
+                          item.imageUrl,
+                          fit: BoxFit.cover,
+                          width: 100,
+                          height: 100,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return const Center(child: CircularProgressIndicator());
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: 100,
+                              height: 100,
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.checkroom),
+                            );
+                          },
+                        ),
                       ),
                       Positioned(
                         top: 2,
@@ -438,15 +441,20 @@ class _CreateOutfitPageState extends State<CreateOutfitPage> {
                                   ),
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(14),
-                                    child: item.imageBase64 != null
-                                        ? Image.memory(
-                                            base64Decode(item.imageBase64!),
-                                            fit: BoxFit.cover,
-                                          )
-                                        : Image.file(
-                                            File(item.imagePath),
-                                            fit: BoxFit.cover,
-                                          ),
+                                    child: Image.network(
+                                      item.imageUrl,
+                                      fit: BoxFit.cover,
+                                      loadingBuilder: (context, child, loadingProgress) {
+                                        if (loadingProgress == null) return child;
+                                        return const Center(child: CircularProgressIndicator());
+                                      },
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Container(
+                                          color: Colors.grey[300],
+                                          child: const Icon(Icons.checkroom),
+                                        );
+                                      },
+                                    ),
                                   ),
                                 ),
                               );

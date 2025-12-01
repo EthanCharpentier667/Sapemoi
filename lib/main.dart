@@ -229,13 +229,17 @@ class _ContentViewState extends State<ContentView> {
     setState(() => analyzing = true);
 
     try {
+      final imageUrl = await NetworkManager().uploadImage(pickedImageBase64!);
+      if (imageUrl == null) {
+        throw Exception('Failed to upload image');
+      }
+
       final result = await NetworkManager().analyzeImage(pickedImageBase64!);
 
       final clothing = Clothing(
         id: 0,
         name: newName.isEmpty ? 'New Item' : newName,
-        imagePath: pickedImageFile!.path,
-        imageBase64: pickedImageBase64,
+        imageUrl: imageUrl,
         type: result.type,
         specificType: result.specificType,
         colors: result.colors,
@@ -452,8 +456,7 @@ class _ClothingDetailModalState extends State<ClothingDetailModal> {
     final updated = Clothing(
       id: widget.clothing.id,
       name: widget.clothing.name,
-      imagePath: widget.clothing.imagePath,
-      imageBase64: widget.clothing.imageBase64,
+      imageUrl: widget.clothing.imageUrl,
       type: widget.clothing.type,
       specificType: widget.clothing.specificType,
       colors: widget.clothing.colors,
@@ -474,8 +477,7 @@ class _ClothingDetailModalState extends State<ClothingDetailModal> {
     final updated = Clothing(
       id: widget.clothing.id,
       name: widget.clothing.name,
-      imagePath: widget.clothing.imagePath,
-      imageBase64: widget.clothing.imageBase64,
+      imageUrl: widget.clothing.imageUrl,
       type: widget.clothing.type,
       specificType: widget.clothing.specificType,
       colors: widget.clothing.colors,
@@ -496,8 +498,7 @@ class _ClothingDetailModalState extends State<ClothingDetailModal> {
     final updated = Clothing(
       id: widget.clothing.id,
       name: widget.clothing.name,
-      imagePath: widget.clothing.imagePath,
-      imageBase64: widget.clothing.imageBase64,
+      imageUrl: widget.clothing.imageUrl,
       type: _selectedType,
       specificType: widget.clothing.specificType,
       colors: widget.clothing.colors,
@@ -518,8 +519,7 @@ class _ClothingDetailModalState extends State<ClothingDetailModal> {
     final updated = Clothing(
       id: widget.clothing.id,
       name: widget.clothing.name,
-      imagePath: widget.clothing.imagePath,
-      imageBase64: widget.clothing.imageBase64,
+      imageUrl: widget.clothing.imageUrl,
       type: widget.clothing.type,
       specificType: widget.clothing.specificType,
       colors: _editableColors,
@@ -575,28 +575,36 @@ class _ClothingDetailModalState extends State<ClothingDetailModal> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                if (widget.clothing.imageBase64 != null)
-                  Container(
-                    height: 200,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      image: DecorationImage(
-                        image: MemoryImage(base64Decode(widget.clothing.imageBase64!)),
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  )
-                else
-                  Container(
-                    height: 200,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      image: DecorationImage(
-                        image: FileImage(File(widget.clothing.imagePath)),
-                        fit: BoxFit.cover,
-                      ),
+                Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      widget.clothing.imageUrl,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Center(
+                          child: CircularProgressIndicator(
+                            value: loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded /
+                                    loadingProgress.expectedTotalBytes!
+                                : null,
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.broken_image, size: 48),
+                        );
+                      },
                     ),
                   ),
+                ),
                 const SizedBox(height: 16),
                 _buildInfoRow('Name', widget.clothing.name),
                 // Editable Type with dropdown

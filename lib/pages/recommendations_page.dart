@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
-import 'dart:convert';
 import 'dart:ui';
 import '../models.dart';
 import '../recommendation_engine.dart';
@@ -348,7 +346,23 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                               width: 70,
                               margin: const EdgeInsets.only(right: 8),
                               decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade300)),
-                              child: ClipRRect(borderRadius: BorderRadius.circular(8), child: item.imageBase64 != null ? Image.memory(base64Decode(item.imageBase64!), fit: BoxFit.cover) : Image.file(File(item.imagePath), fit: BoxFit.cover)),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(
+                                  item.imageUrl,
+                                  fit: BoxFit.cover,
+                                  loadingBuilder: (context, child, loadingProgress) {
+                                    if (loadingProgress == null) return child;
+                                    return const Center(child: CircularProgressIndicator());
+                                  },
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      color: Colors.grey[300],
+                                      child: const Icon(Icons.checkroom),
+                                    );
+                                  },
+                                ),
+                              ),
                             );
                           },
                         ),
@@ -402,29 +416,29 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   }
 
   Widget _fallbackPreview(MissingPieceRecommendation rec) {
-    // If there's an outfit image, use it and apply a blur to give a
-    // soft fallback preview; otherwise render a blurred gradient placeholder.
     if (rec.existingOutfit.isNotEmpty) {
       final item = rec.existingOutfit.first;
-      if (item.imageBase64 != null) {
-        final img = Image.memory(base64Decode(item.imageBase64!), fit: BoxFit.cover);
-        return ImageFiltered(
-          imageFilter: ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
-          child: img,
-        );
-      }
-      try {
-        final img = Image.file(File(item.imagePath), fit: BoxFit.cover);
-        return ImageFiltered(
-          imageFilter: ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
-          child: img,
-        );
-      } catch (_) {
-        // fallthrough to gradient placeholder
-      }
+      return ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
+        child: Image.network(
+          item.imageUrl,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.grey.shade300, Colors.grey.shade200],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            );
+          },
+        ),
+      );
     }
 
-    final placeholder = Container(
+    return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [Colors.grey.shade300, Colors.grey.shade200],
@@ -433,14 +447,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         ),
       ),
     );
-
-    return ImageFiltered(
-      imageFilter: ImageFilter.blur(sigmaX: 4.0, sigmaY: 4.0),
-      child: placeholder,
-    );
-  }
-
-  String _generateVintedUrl(MissingPieceRecommendation rec) {
+  }  String _generateVintedUrl(MissingPieceRecommendation rec) {
     final query = rec.searchKeywords.isNotEmpty
         ? rec.searchKeywords.first
         : '${rec.suggestedBrands.isNotEmpty ? rec.suggestedBrands.first : ''} ${rec.specificType}';

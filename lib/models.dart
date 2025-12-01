@@ -3,8 +3,7 @@ import 'package:sapemoi/network_manager.dart';
 class Clothing {
   int id;
   String name;
-  String imagePath;
-  String? imageBase64;
+  String imageUrl;
   String type;
   String specificType;
   List<ColorInfo> colors;
@@ -18,8 +17,7 @@ class Clothing {
   Clothing({
     required this.id,
     required this.name,
-    required this.imagePath,
-    this.imageBase64,
+    required this.imageUrl,
     required this.type,
     this.specificType = 'unknown',
     required this.colors,
@@ -35,8 +33,7 @@ class Clothing {
     return {
       'id': id,
       'name': name,
-      'imagePath': imagePath,
-      'imageBase64': imageBase64,
+      'imageUrl': imageUrl,
       'type': type,
       'specificType': specificType,
       'colors': colors.map((c) => '${c.r},${c.g},${c.b},${c.pct}').join(';'),
@@ -50,7 +47,6 @@ class Clothing {
   }
 
   factory Clothing.fromMap(Map<String, dynamic> map) {
-    // PostgreSQL returns lowercase field names, handle both camelCase and lowercase
     final colorString = (map['colors'] ?? '') as String;
     final colorParts = colorString.split(';');
     final colors = colorParts.map((part) {
@@ -92,8 +88,7 @@ class Clothing {
     return Clothing(
       id: map['id'] as int,
       name: map['name'] as String,
-      imagePath: getField<String>('imagePath', 'imagepath') ?? '',
-      imageBase64: getField<String>('imageBase64', 'imagebase64'),
+      imageUrl: getField<String>('imageUrl', 'imageurl') ?? '',
       type: map['type'] as String,
       specificType: getField<String>('specificType', 'specifictype') ?? 'unknown',
       colors: colors.isEmpty ? [ColorInfo(r: 128, g: 128, b: 128, pct: 100)] : colors,

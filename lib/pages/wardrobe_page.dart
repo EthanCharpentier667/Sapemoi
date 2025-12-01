@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
-import 'dart:convert';
 import '../models.dart';
 
 class WardrobePage extends StatelessWidget {
@@ -184,23 +182,21 @@ class ClothingCard extends StatelessWidget {
             Expanded(
               child: ClipRRect(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                child: clothing.imageBase64 != null
-                    ? Image.memory(
-                        base64Decode(clothing.imageBase64!),
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                      )
-                    : Image.file(
-                        File(clothing.imagePath),
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        errorBuilder: (context, error, stack) {
-                          return Container(
-                            color: Colors.grey[300],
-                            child: const Icon(Icons.broken_image, size: 48),
-                          );
-                        },
-                      ),
+                child: Image.network(
+                  clothing.imageUrl,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return const Center(child: CircularProgressIndicator());
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Colors.grey[300],
+                      child: const Icon(Icons.checkroom, size: 48),
+                    );
+                  },
+                ),
               ),
             ),
             Padding(
