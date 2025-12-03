@@ -234,7 +234,7 @@ class _ContentViewState extends State<ContentView> {
         throw Exception('Failed to upload image');
       }
 
-      final result = await NetworkManager().analyzeImage(pickedImageBase64!);
+      final result = await NetworkManager().analyzeImage(imageUrl);
 
       final clothing = Clothing(
         id: 0,

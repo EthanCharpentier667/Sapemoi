@@ -28,7 +28,10 @@ class AuthManager {
       );
 
       final userCredential = await _auth.signInWithCredential(credential);
-      await _saveUserToRemote(userCredential.user!);
+      
+      final googleId = googleUser.id;
+      await _saveUserToRemoteWithCustomId(userCredential.user!, googleId);
+      
       return userCredential;
     } catch (e) {
       rethrow;
@@ -51,7 +54,11 @@ class AuthManager {
       );
 
       final userCredential = await _auth.signInWithCredential(oauthCredential);
-      await _saveUserToRemote(userCredential.user!);
+      
+      // Use Apple user ID as the database UID
+      final appleId = appleCredential.userIdentifier ?? userCredential.user!.uid;
+      await _saveUserToRemoteWithCustomId(userCredential.user!, appleId);
+      
       return userCredential;
     } catch (e) {
       rethrow;
@@ -108,16 +115,52 @@ class AuthManager {
       await NetworkManager().upsertUser(userMap);
     } catch (e) {}
   }
+  
+  Future<void> _saveUserToRemoteWithCustomId(User user, String customUid) async {
+    try {
+      final existing = await NetworkManager().getUserRemote(customUid);
+      if (existing != null) {
+        return;
+      }
+      
+      final userMap = UserModel(
+        uid: customUid,
+        email: user.email ?? '',
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        createdAt: DateTime.now(),
+      ).toMap();
+      
+      await NetworkManager().upsertUser(userMap);
+    } catch (e) {}
+  }
 
-  /// Returns the user model fetched from the remote API (no local cache).
   Future<UserModel?> getLocalUser() async {
     final firebaseUser = _auth.currentUser;
     if (firebaseUser == null) return null;
+    
     try {
-      var remote = await NetworkManager().getUserRemote(firebaseUser.uid);
+      String dbUid = firebaseUser.uid;
+      
+      final googleProvider = firebaseUser.providerData.firstWhere(
+        (info) => info.providerId == 'google.com',
+        orElse: () => firebaseUser.providerData.first,
+      );
+      
+      if (googleProvider.providerId == 'google.com' && googleProvider.uid != null && googleProvider.uid!.isNotEmpty) {
+        dbUid = googleProvider.uid!;
+      } else if (googleProvider.providerId == 'apple.com' && googleProvider.uid != null && googleProvider.uid!.isNotEmpty) {
+        dbUid = googleProvider.uid!;
+      }
+      
+      var remote = await NetworkManager().getUserRemote(dbUid);
       if (remote == null) {
-        await _saveUserToRemote(firebaseUser);
-        remote = await NetworkManager().getUserRemote(firebaseUser.uid);
+        if (googleProvider.providerId == 'google.com' || googleProvider.providerId == 'apple.com') {
+          await _saveUserToRemoteWithCustomId(firebaseUser, dbUid);
+        } else {
+          await _saveUserToRemote(firebaseUser);
+        }
+        remote = await NetworkManager().getUserRemote(dbUid);
         if (remote == null) return null;
       }
       return UserModel.fromMap(remote);

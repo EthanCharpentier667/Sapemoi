@@ -7,15 +7,16 @@ class NetworkManager {
   factory NetworkManager() => _instance;
   NetworkManager._internal();
 
-  final String endpoint = 'https://sapemoi-api.onrender.com/analyze';
-  final String totalEndpoint = 'https://sapemoi-api.onrender.com/total';
-  final String styleEndpoint =
-      'https://sapemoi-api.onrender.com/analyse_user_style';
-  final String recommendEndpoint =
-      'https://sapemoi-api.onrender.com/recomands_clothing_items';
-  final String googleSearchEndpoint =
-      'https://sapemoi-api.onrender.com/google_search';
-  final String remoteApiBase = 'https://sapemoi-api.onrender.com/db';
+  static const String render = 'https://sapemoi-api.onrender.com';
+  static const String droplet = 'http://164.92.204.32:3000';
+  static const String actual = droplet;
+
+  final String endpoint = '$actual/analyze';
+  final String totalEndpoint = '$actual/total';
+  final String styleEndpoint = '$actual/analyse_user_style';
+  final String recommendEndpoint = '$actual/recomands_clothing_items';
+  final String googleSearchEndpoint = '$actual/google_search';
+  final String remoteApiBase = '$actual/db';
 
   // --- Remote DB API helpers (Render endpoints)
   Future<bool> upsertUser(Map<String, dynamic> user) async {
@@ -54,14 +55,11 @@ class NetworkManager {
   }
 
   Future<Map<String, dynamic>?> getUserRemote(String uid) async {
-    final stopwatch = Stopwatch()..start();
     try {
       final url = Uri.parse('$remoteApiBase/users/$uid');
       final resp = await http
           .get(url, headers: {'Content-Type': 'application/json'})
           .timeout(const Duration(seconds: 10));
-      stopwatch.stop();
-      print('⏱️ getUserRemote took ${stopwatch.elapsedMilliseconds}ms');
       if (resp.statusCode != 200) return null;
       final jsonData = json.decode(resp.body);
       if (jsonData is Map<String, dynamic>) return jsonData;
@@ -161,6 +159,7 @@ class NetworkManager {
       final jsonData = json.decode(responseBody) as Map<String, dynamic>;
       return jsonData['imageUrl'] as String?;
     } catch (e) {
+      print('❌ Error uploading image: $e');
       return null;
     }
   }
@@ -483,12 +482,12 @@ class NetworkManager {
   }
 
   Future<AnalysisResult> analyzeImage(
-    String base64Image, {
+    String imageUrl, {
     Duration timeout = const Duration(minutes: 2),
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
-      final payload = {'base64': base64Image};
+      final payload = {'imageUrl': imageUrl};
       final body = json.encode(payload);
 
       final response = await http
@@ -499,7 +498,7 @@ class NetworkManager {
           )
           .timeout(timeout);
 
-      print(body);
+      print('📥 Analysis request: $body');
       print('📥 Response status: ${response.statusCode}');
 
       if (response.statusCode != 200) {
