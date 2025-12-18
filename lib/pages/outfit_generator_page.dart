@@ -1,17 +1,22 @@
-
-
 import '../auth_manager.dart';
 import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../db_manager.dart';
 import '../outfit_generator.dart';
+import 'complex_outfit_page.dart';
 
 class OutfitGeneratorPage extends StatefulWidget {
   final List<Clothing> clothes;
   final VoidCallback onUpdate;
+  final bool isEmbedded;
 
-  const OutfitGeneratorPage({super.key, required this.clothes, required this.onUpdate});
+  const OutfitGeneratorPage({
+    super.key,
+    required this.clothes,
+    required this.onUpdate,
+    this.isEmbedded = false,
+  });
 
   @override
   State<OutfitGeneratorPage> createState() => _OutfitGeneratorPageState();
@@ -35,9 +40,11 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
       types.add(item.type);
     }
 
+    final mandatoryTypes = ['top', 'bottom', 'footwear'];
+    
     for (final type in types) {
       final isHeadwear = type.toLowerCase() == 'headwear';
-      final isMandatory = ['top', 'bottom', 'footwear'].contains(type.toLowerCase());
+      final isMandatory = mandatoryTypes.contains(type.toLowerCase());
 
       if (isMandatory) {
         selectedTypes[type] = true;
@@ -57,11 +64,7 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Outfits'),
-      ),
-      body: Column(
+    final body = Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
@@ -83,7 +86,8 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
                     spacing: 8,
                     runSpacing: 8,
                     children: selectedTypes.keys.map((type) {
-                      final isMandatory = ['top', 'bottom', 'footwear'].contains(type.toLowerCase());
+                      final mandatoryTypes = ['top', 'bottom', 'footwear'];
+                      final isMandatory = mandatoryTypes.contains(type.toLowerCase());
                       final isSelected = selectedTypes[type]!;
 
                       return FilterChip(
@@ -92,6 +96,8 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
                         onSelected: isMandatory ? null : (value) {
                           setState(() => selectedTypes[type] = value);
                         },
+                        backgroundColor: isMandatory && isSelected ? Colors.purple.shade100 : null,
+                        selectedColor: isMandatory ? Colors.purple.shade200 : null,
                       );
                     }).toList(),
                   ),
@@ -321,7 +327,31 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
                   ),
           ),
         ],
+      );
+
+    if (widget.isEmbedded) {
+      return body;
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Outfits'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.layers),
+            tooltip: 'Complex Outfit Builder',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ComplexOutfitPage(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
+      body: body,
     );
   }
 
@@ -333,12 +363,17 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
 
     if (activeTypes.isEmpty) return;
 
+    // Check mandatory types - must have top, bottom, and footwear
     final hasTop = activeTypes.any((t) => t.toLowerCase() == 'top');
     final hasBottom = activeTypes.any((t) => t.toLowerCase() == 'bottom');
-    final hasDress = activeTypes.any((t) => t.toLowerCase() == 'dress');
+    final hasFootwear = activeTypes.any((t) => t.toLowerCase() == 'footwear');
 
-    if (!hasTop && !hasBottom && !hasDress) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select at least a top, bottom, or dress')));
+    if (!hasTop || !hasBottom || !hasFootwear) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You need at least a top, bottom, and footwear to generate outfits')),
+        );
+      }
       return;
     }
 

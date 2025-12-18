@@ -531,6 +531,7 @@ class NetworkManager {
 
       final type = _parseType(content);
       final specificType = _parseSpecificType(content);
+      final layer = _parseLayer(content);
       final colors = _parseColors(content);
       final brand = _parseBrand(content);
       final product = _parseProduct(content);
@@ -541,6 +542,7 @@ class NetworkManager {
       return AnalysisResult(
         type: type,
         specificType: specificType,
+        layer: layer,
         colors: colors,
         brand: brand,
         product: product,
@@ -683,6 +685,11 @@ class NetworkManager {
     return _parseField(content, 'SpecificType') ?? 'unknown';
   }
 
+  int _parseLayer(String content) {
+    final layerStr = _parseField(content, 'Layer');
+    return int.tryParse(layerStr ?? '1') ?? 1;
+  }
+
   List<ColorInfo> _parseColors(String content) {
     final regex = RegExp(r'Colors:\s*(.+)', caseSensitive: false);
     final match = regex.firstMatch(content);
@@ -733,6 +740,7 @@ class NetworkManager {
 class AnalysisResult {
   final String type;
   final String specificType;
+  final int layer;
   final List<ColorInfo> colors;
   final String brand;
   final String product;
@@ -740,6 +748,7 @@ class AnalysisResult {
   AnalysisResult({
     required this.type,
     this.specificType = 'unknown',
+    this.layer = 1,
     required this.colors,
     required this.brand,
     required this.product,

@@ -6,6 +6,7 @@ class Clothing {
   String imageUrl;
   String type;
   String specificType;
+  int layer;
   List<ColorInfo> colors;
   String brand;
   String productName;
@@ -20,6 +21,7 @@ class Clothing {
     required this.imageUrl,
     required this.type,
     this.specificType = 'unknown',
+    this.layer = 1,
     required this.colors,
     this.brand = 'unknown',
     this.productName = 'unknown',
@@ -36,6 +38,7 @@ class Clothing {
       'imageUrl': imageUrl,
       'type': type,
       'specificType': specificType,
+      'layer': layer,
       'colors': colors.map((c) => '${c.r},${c.g},${c.b},${c.pct}').join(';'),
       'brand': brand,
       'productName': productName,
@@ -91,6 +94,7 @@ class Clothing {
       imageUrl: getField<String>('imageUrl', 'imageurl') ?? '',
       type: map['type'] as String,
       specificType: getField<String>('specificType', 'specifictype') ?? 'unknown',
+      layer: map['layer'] as int? ?? 1,
       colors: colors.isEmpty ? [ColorInfo(r: 128, g: 128, b: 128, pct: 100)] : colors,
       brand: map['brand'] as String? ?? 'unknown',
       productName: getField<String>('productName', 'productname') ?? 'unknown',

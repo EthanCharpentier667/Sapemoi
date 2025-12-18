@@ -14,7 +14,7 @@ import 'pages/profile_page.dart';
 import 'pages/recommendations_page.dart';
 import 'pages/wardrobe_page.dart';
 import 'pages/create_outfit_page.dart';
-import 'pages/outfit_generator_page.dart';
+import 'pages/outfits_tab_page.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -84,7 +84,6 @@ class _AuthGateState extends State<AuthGate> {
       return;
     }
 
-    // Skip if we already verified this UID (avoid repeated upserts)
     if (_lastCheckedUid == user.uid && _status == _AuthStatus.signedIn) {
       return;
     }
@@ -92,10 +91,8 @@ class _AuthGateState extends State<AuthGate> {
     setState(() => _status = _AuthStatus.loading);
     _lastCheckedUid = user.uid;
     
-    // Ensure remote profile exists (getLocalUser will attempt upsert if missing)
     final remote = await AuthManager().getLocalUser();
     if (remote == null) {
-      // No remote profile -> treat as signed out and navigate to login
       setState(() => _status = _AuthStatus.signedOut);
     } else {
       setState(() => _status = _AuthStatus.signedIn);
@@ -173,7 +170,7 @@ class _ContentViewState extends State<ContentView> {
                   onAddPressed: () => setState(() => showAddModal = true),
                   onClothingTap: (clothing) => setState(() => selectedClothing = clothing),
                 ),
-                OutfitGeneratorPage(
+                OutfitsTabPage(
                   clothes: clothes,
                   onUpdate: _loadClothes,
                 ),
@@ -242,6 +239,7 @@ class _ContentViewState extends State<ContentView> {
         imageUrl: imageUrl,
         type: result.type,
         specificType: result.specificType,
+        layer: result.layer,
         colors: result.colors,
         brand: result.brand,
         productName: result.product,
@@ -366,19 +364,25 @@ class _ContentViewState extends State<ContentView> {
               const SizedBox(height: 16),
               TextField(
                 decoration: const InputDecoration(
-                  labelText: 'Name (optional)',
+                  labelText: 'Name',
                   border: OutlineInputBorder(),
                 ),
-                onChanged: (value) => newName = value,
+                onChanged: (value) => setState(() => newName = value),
               ),
               const SizedBox(height: 16),
               if (analyzing)
                 const CircularProgressIndicator()
               else
                 ElevatedButton(
-                  onPressed: pickedImageFile != null ? _addClothing : null,
+                  onPressed: pickedImageFile != null && newName.trim().isNotEmpty ? _addClothing : null,
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(50),
+                    backgroundColor: pickedImageFile != null && newName.trim().isNotEmpty 
+                        ? null 
+                        : Colors.grey[300],
+                    foregroundColor: pickedImageFile != null && newName.trim().isNotEmpty 
+                        ? null 
+                        : Colors.grey[600],
                   ),
                   child: const Text('Analyze & Add'),
                 ),

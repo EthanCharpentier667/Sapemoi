@@ -137,7 +137,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     if (userModel == null) {
-      // No remote profile: redirect to login screen
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) Navigator.of(context).pushReplacementNamed('/login');
       });

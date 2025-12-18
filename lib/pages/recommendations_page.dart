@@ -68,7 +68,6 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         boldMode: false,
       );
 
-      // If another generation started or widget disposed, don't call setState
       if (myGeneration != _generationCounter) return;
       if (!mounted) return;
 
@@ -77,7 +76,6 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         isGenerating = false;
       });
     } catch (e) {
-      // Avoid calling setState after dispose
       if (mounted) {
         setState(() => isGenerating = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error generating recommendations: $e')));
