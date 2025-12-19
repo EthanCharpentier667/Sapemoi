@@ -4,18 +4,15 @@ import 'package:flutter/material.dart';
 import '../models.dart';
 import '../db_manager.dart';
 import '../outfit_generator.dart';
-import 'complex_outfit_page.dart';
 
 class OutfitGeneratorPage extends StatefulWidget {
   final List<Clothing> clothes;
   final VoidCallback onUpdate;
-  final bool isEmbedded;
 
   const OutfitGeneratorPage({
     super.key,
     required this.clothes,
     required this.onUpdate,
-    this.isEmbedded = false,
   });
 
   @override
@@ -64,7 +61,23 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final body = Column(
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Quick Outfits'),
+        actions: [
+          IconButton(
+            icon: Icon(debugShowAll ? Icons.bug_report : Icons.bug_report_outlined),
+            tooltip: debugShowAll ? 'Hide all outfits' : 'Show all outfits',
+            onPressed: () {
+              setState(() {
+                debugShowAll = !debugShowAll;
+                _generateOutfits();
+              });
+            },
+          ),
+        ],
+      ),
+      body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
@@ -327,31 +340,7 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
                   ),
           ),
         ],
-      );
-
-    if (widget.isEmbedded) {
-      return body;
-    }
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Outfits'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.layers),
-            tooltip: 'Complex Outfit Builder',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ComplexOutfitPage(),
-                ),
-              );
-            },
-          ),
-        ],
       ),
-      body: body,
     );
   }
 
@@ -362,8 +351,6 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
         .toSet();
 
     if (activeTypes.isEmpty) return;
-
-    // Check mandatory types - must have top, bottom, and footwear
     final hasTop = activeTypes.any((t) => t.toLowerCase() == 'top');
     final hasBottom = activeTypes.any((t) => t.toLowerCase() == 'bottom');
     final hasFootwear = activeTypes.any((t) => t.toLowerCase() == 'footwear');

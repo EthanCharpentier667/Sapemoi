@@ -1,12 +1,11 @@
 import 'dart:math';
-
 import '../auth_manager.dart';
-// import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../db_manager.dart';
 import '../outfit_generator.dart';
+import 'complex_outfit_page.dart';
 
 class CreateOutfitPage extends StatefulWidget {
   final List<Clothing> clothes;
@@ -18,7 +17,63 @@ class CreateOutfitPage extends StatefulWidget {
   State<CreateOutfitPage> createState() => _CreateOutfitPageState();
 }
 
-class _CreateOutfitPageState extends State<CreateOutfitPage> {
+class _CreateOutfitPageState extends State<CreateOutfitPage>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Create Outfit'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(
+              icon: Icon(Icons.auto_awesome),
+              text: 'Quick Generate',
+            ),
+            Tab(
+              icon: Icon(Icons.layers),
+              text: 'By Layers',
+            ),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _QuickOutfitTab(clothes: widget.clothes, onUpdate: widget.onUpdate),
+          ComplexOutfitPage(clothes: widget.clothes),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickOutfitTab extends StatefulWidget {
+  final List<Clothing> clothes;
+  final VoidCallback onUpdate;
+
+  const _QuickOutfitTab({required this.clothes, required this.onUpdate});
+
+  @override
+  State<_QuickOutfitTab> createState() => _QuickOutfitTabState();
+}
+
+class _QuickOutfitTabState extends State<_QuickOutfitTab> {
   String? selectedSlotType;
   Map<String, Clothing?> outfitSlots = {
     'headwear': null,
@@ -39,109 +94,79 @@ class _CreateOutfitPageState extends State<CreateOutfitPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Your Outfit'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.auto_awesome),
-            tooltip: 'Generate Best Outfit',
-            onPressed: _generateBestOutfit,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              setState(() {
-                outfitSlots = {
-                  'headwear': null,
-                  'outerwear': null,
-                  'top': null,
-                  'bottom': null,
-                  'footwear': null,
-                  'accessory': null,
-                };
-                customOutfitScore = null;
-                selectedSlotType = null;
-                disabledSlots.clear();
-              });
-            },
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: 350,
-                    height: 550,
-                    child: _buildCharacterWithSlots(),
-                  ),
-                  const SizedBox(height: 24),
-                  if (customOutfitScore != null)
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 20),
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            _getCompatibilityColor((100 - customOutfitScore!.score).toInt()).shade50,
-                            _getCompatibilityColor((100 - customOutfitScore!.score).toInt()).shade100,
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+    return Stack(
+      children: [
+        SingleChildScrollView(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: 350,
+                  height: 550,
+                  child: _buildCharacterWithSlots(),
+                ),
+                const SizedBox(height: 24),
+                if (customOutfitScore != null)
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          _getCompatibilityColor((100 - customOutfitScore!.score).toInt()).shade50,
+                          _getCompatibilityColor((100 - customOutfitScore!.score).toInt()).shade100,
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _getCompatibilityColor((100 - customOutfitScore!.score).toInt()).withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
                         ),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _getCompatibilityColor((100 - customOutfitScore!.score).toInt()).withOpacity(0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '${(100 - customOutfitScore!.score).toInt()}% ',
-                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            onPressed: () async {
-                              final userModel = await AuthManager().getLocalUser();
-                              if (userModel == null) return;
-                              final ids = outfitSlots.values.where((e) => e != null).cast<Clothing>().map((c) => c.id).toList();
-                              if (ids.isEmpty) return;
-                              await DBManager().markOutfitAsUsed(ids, userModel.uid);
-                              widget.onUpdate();
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Outfit marked as worn!')));
-                              }
-                            },
-                            icon: const Icon(Icons.check_circle),
-                            label: const Text('Mark as Worn'),
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
-                  const SizedBox(height: 20),
-                ],
-              ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '${(100 - customOutfitScore!.score).toInt()}% ',
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final userModel = await AuthManager().getLocalUser();
+                            if (userModel == null) return;
+                            final ids = outfitSlots.values.where((e) => e != null).cast<Clothing>().map((c) => c.id).toList();
+                            if (ids.isEmpty) return;
+                            await DBManager().markOutfitAsUsed(ids, userModel.uid);
+                            widget.onUpdate();
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Outfit marked as worn!')));
+                            }
+                          },
+                          icon: const Icon(Icons.check_circle),
+                          label: const Text('Mark as Worn'),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 20),
+              ],
             ),
           ),
-          if (selectedSlotType != null) _buildInventoryDrawer(),
-        ],
-      ),
+        ),
+        if (selectedSlotType != null) _buildInventoryDrawer(),
+      ],
     );
   }
 

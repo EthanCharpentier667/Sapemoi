@@ -14,7 +14,7 @@ import 'pages/profile_page.dart';
 import 'pages/recommendations_page.dart';
 import 'pages/wardrobe_page.dart';
 import 'pages/create_outfit_page.dart';
-import 'pages/outfits_tab_page.dart';
+import 'pages/outfit_generator_page.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -249,7 +249,7 @@ class _ContentViewState extends State<ContentView> {
                   onAddPressed: () => setState(() => showAddModal = true),
                   onClothingTap: (clothing) => setState(() => selectedClothing = clothing),
                 ),
-                OutfitsTabPage(
+                OutfitGeneratorPage(
                   clothes: clothes,
                   onUpdate: _loadClothes,
                 ),
