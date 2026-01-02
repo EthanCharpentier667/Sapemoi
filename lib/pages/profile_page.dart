@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../auth_manager.dart';
 import '../user_model.dart';
 import '../db_manager.dart';
 import '../network_manager.dart';
 import '../models.dart';
 import '../recommendation_engine.dart';
+import 'create_post_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -22,6 +24,9 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _loadingStyle = false;
   bool _loadingUser = true;
   UserModel? _userModel;
+  List<OutfitPost> _myPosts = [];
+  bool _loadingPosts = false;
+  List<Map<String, dynamic>> _recentOutfits = [];
 
   @override
   void initState() {
@@ -41,16 +46,22 @@ class _ProfilePageState extends State<ProfilePage> {
       DBManager().getAllClothes(userModel.uid),
       DBManager().getTotalWardrobeValue(userModel.uid),
       DBManager().getUserStyle(userModel.uid),
+      NetworkManager().getUserPostsRemote(userModel.uid, limit: 20),
+      DBManager().getRecentOutfits(userModel.uid, limit: 5),
     ]);
 
     final clothes = results[0] as List<Clothing>;
     final total = results[1] as double;
     final stored = results[2] as StyleProfile?;
+    final posts = results[3] as List<OutfitPost>;
+    final recent = results[4] as List<Map<String, dynamic>>;
 
     setState(() {
       _userModel = userModel;
       _clothes = clothes;
       _storedStyle = stored;
+      _myPosts = posts;
+      _recentOutfits = recent;
       if (total > 0) {
         _wardrobeValue = total;
       }
@@ -142,6 +153,7 @@ class _ProfilePageState extends State<ProfilePage> {
       });
       return const Scaffold();
     }
+
     final mostWorn = [..._clothes]..sort((a, b) => b.wearCount.compareTo(a.wearCount));
     final leastWorn = [..._clothes]..sort((a, b) => a.wearCount.compareTo(b.wearCount));
 
@@ -223,7 +235,6 @@ class _ProfilePageState extends State<ProfilePage> {
                                 )
                               : Text(_wardrobeValue == null ? 'Estimate' : 'Re-estimate'),
                         ),
-                        // style estimation button moved below into its own card to avoid layout overflow
                       ],
                     ),
                     if (_wardrobeValue != null) ...[
@@ -486,6 +497,75 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
             
+            const SizedBox(height: 24),
+            
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.photo_library, color: Colors.purple, size: 28),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'My Posts',
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        if (_recentOutfits.isNotEmpty)
+                          ElevatedButton.icon(
+                            onPressed: () => _showPostLastOutfitDialog(),
+                            icon: const Icon(Icons.add_a_photo, size: 18),
+                            label: const Text('Post Last'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.purple,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    if (_myPosts.isEmpty)
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            children: [
+                              Icon(Icons.photo_library_outlined, size: 48, color: Colors.grey[400]),
+                              const SizedBox(height: 8),
+                              Text(
+                                'No posts yet',
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      SizedBox(
+                        height: 200,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _myPosts.length,
+                          itemBuilder: (context, index) {
+                            final post = _myPosts[index];
+                            return _buildPostThumbnail(post);
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            
             const SizedBox(height: 32),
             
             Card(
@@ -493,7 +573,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                      _buildInfoRow(
+                    _buildInfoRow(
                       icon: Icons.email,
                       label: 'Email',
                       value: userModel.email,
@@ -515,6 +595,22 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
             const SizedBox(height: 32),
+            
+            if (_recentOutfits.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: OutlinedButton.icon(
+                  onPressed: () => _showClearWornOutfitsDialog(),
+                  icon: const Icon(Icons.delete_sweep),
+                  label: const Text('Clear Worn Outfits History'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.orange,
+                    side: const BorderSide(color: Colors.orange, width: 2),
+                    minimumSize: const Size.fromHeight(50),
+                  ),
+                ),
+              ),
+            
             ElevatedButton(
               onPressed: () async {
                 RecommendationEngine.clearCache();
@@ -574,5 +670,228 @@ class _ProfilePageState extends State<ProfilePage> {
   String _capitalizeFirst(String text) {
     if (text.isEmpty) return text;
     return text[0].toUpperCase() + text.substring(1);
+  }
+
+  Widget _buildPostThumbnail(OutfitPost post) {
+    return GestureDetector(
+      onLongPress: () => _showDeletePostDialog(post),
+      child: Container(
+        width: 150,
+        margin: const EdgeInsets.only(right: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CachedNetworkImage(
+                      imageUrl: post.imageUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: Colors.grey[300],
+                        child: const Center(child: CircularProgressIndicator()),
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.error),
+                      ),
+                    ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: GestureDetector(
+                        onTap: () => _showDeletePostDialog(post),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.8),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.favorite, color: Colors.red, size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${post.likes}',
+                              style: const TextStyle(color: Colors.white, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              post.description.isEmpty ? 'No caption' : post.description,
+              style: const TextStyle(fontSize: 12),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDeletePostDialog(OutfitPost post) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Post?'),
+        content: const Text('This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final userModel = await AuthManager().getLocalUser();
+              if (userModel != null) {
+                await DBManager().deleteOutfitPost(post.id, userModel.uid);
+                _loadData();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Post deleted')),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPostLastOutfitDialog() {
+    if (_recentOutfits.isEmpty) return;
+
+    final lastOutfit = _recentOutfits.first;
+    final clothingIds = (lastOutfit['clothing_ids'] as String?)?.split(',').map((id) => int.parse(id)).toList() ?? [];
+    final outfitItems = _clothes.where((c) => clothingIds.contains(c.id)).toList();
+
+    if (outfitItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No outfit items found')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Post Last Worn Outfit?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Your last worn outfit:'),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              children: outfitItems.map((item) {
+                return Chip(
+                  avatar: CircleAvatar(
+                    backgroundImage: NetworkImage(item.imageUrl),
+                  ),
+                  label: Text(item.name),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CreatePostPage(outfitItems: outfitItems),
+                ),
+              ).then((_) => _loadData());
+            },
+            icon: const Icon(Icons.send),
+            label: const Text('Post It'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClearWornOutfitsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear Worn Outfits?'),
+        content: Text(
+          'This will delete all ${_recentOutfits.length} worn outfit records from your history. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final userModel = await AuthManager().getLocalUser();
+              if (userModel != null) {
+                await DBManager().clearWornOutfits(userModel.uid);
+                await _loadData();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('✨ Worn outfits history cleared')),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Clear All'),
+          ),
+        ],
+      ),
+    );
   }
 }

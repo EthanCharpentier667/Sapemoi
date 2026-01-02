@@ -88,4 +88,35 @@ class DBManager {
   Future<List<int>> getUnvaluedClothingIds(String userId) async {
     return await _net.getUnvaluedClothingIdsRemote(userId);
   }
+
+  // Feed social methods
+  Future<int?> createOutfitPost({
+    required String userId,
+    required String imageUrl,
+    required String description,
+    required List<int> clothingIds,
+  }) async {
+    return await _net.createOutfitPostRemote(
+      userId: userId,
+      imageUrl: imageUrl,
+      description: description,
+      clothingIds: clothingIds,
+    );
+  }
+
+  Future<List<OutfitPost>> getFeedPosts(String currentUserId, {int limit = 50}) async {
+    return await _net.getFeedPostsRemote(currentUserId, limit: limit);
+  }
+
+  Future<void> toggleLikePost(int postId, String userId) async {
+    await _net.toggleLikePostRemote(postId, userId);
+  }
+
+  Future<void> deleteOutfitPost(int postId, String userId) async {
+    await _net.deleteOutfitPostRemote(postId, userId);
+  }
+
+  Future<void> clearWornOutfits(String userId) async {
+    await _net.clearWornOutfitsRemote(userId);
+  }
 }

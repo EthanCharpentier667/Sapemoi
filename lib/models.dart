@@ -296,6 +296,60 @@ class StyleProfile {
   }
 }
 
+class OutfitPost {
+  final int id;
+  final String userId;
+  final String username;
+  final String? photoURL;
+  final String imageUrl;
+  final String description;
+  final List<Clothing> clothingItems;
+  int likes;
+  int comments;
+  bool isLiked;
+  final DateTime createdAt;
+
+  OutfitPost({
+    required this.id,
+    required this.userId,
+    required this.username,
+    this.photoURL,
+    required this.imageUrl,
+    required this.description,
+    required this.clothingItems,
+    required this.likes,
+    required this.comments,
+    required this.isLiked,
+    required this.createdAt,
+  });
+
+  factory OutfitPost.fromMap(Map<String, dynamic> map, List<Clothing> items) {
+    final createdAtRaw = map['created_at'] ?? map['createdAt'];
+    int createdAtMs;
+    if (createdAtRaw is int) {
+      createdAtMs = createdAtRaw;
+    } else if (createdAtRaw is String) {
+      createdAtMs = int.tryParse(createdAtRaw) ?? DateTime.now().millisecondsSinceEpoch;
+    } else {
+      createdAtMs = DateTime.now().millisecondsSinceEpoch;
+    }
+
+    return OutfitPost(
+      id: map['id'] as int,
+      userId: map['user_id'] ?? map['userId'] as String,
+      username: map['username'] as String? ?? 'Unknown',
+      photoURL: map['photo_url'] ?? map['photoURL'] as String?,
+      imageUrl: map['image_url'] ?? map['imageUrl'] as String,
+      description: map['description'] as String? ?? '',
+      clothingItems: items,
+      likes: map['likes'] as int? ?? 0,
+      comments: map['comments'] as int? ?? 0,
+      isLiked: map['is_liked'] ?? map['isLiked'] as bool? ?? false,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(createdAtMs),
+    );
+  }
+}
+
 class MissingPieceRecommendation {
   final String type;
   final String product;

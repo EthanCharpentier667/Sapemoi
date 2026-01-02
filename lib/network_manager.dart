@@ -140,7 +140,7 @@ class NetworkManager {
     }
   }
 
-  Future<String?> uploadImage(String base64Image) async {
+  Future<String?> uploadImage(String base64Image, [String folder = 'clothing']) async {
     try {
       final url = Uri.parse('$remoteApiBase/upload');
       final bytes = base64Decode(base64Image);
@@ -149,7 +149,7 @@ class NetworkManager {
       request.files.add(http.MultipartFile.fromBytes(
         'image',
         bytes,
-        filename: 'clothing_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        filename: '${folder}_${DateTime.now().millisecondsSinceEpoch}.jpg',
       ));
       
       final response = await request.send().timeout(const Duration(seconds: 30));
@@ -734,6 +734,185 @@ class NetworkManager {
 
     final value = match.group(1)?.trim() ?? '';
     return value.split('\n').first.trim();
+  }
+
+  // --- Feed Social API ---
+  Future<int?> createOutfitPostRemote({
+    required String userId,
+    required String imageUrl,
+    required String description,
+    required List<int> clothingIds,
+  }) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/outfit-posts');
+      final body = json.encode({
+        'userId': userId,
+        'imageUrl': imageUrl,
+        'description': description,
+        'clothingIds': clothingIds,
+      });
+      final resp = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(const Duration(seconds: 15));
+      
+      if (resp.statusCode == 200 || resp.statusCode == 201) {
+        final jsonData = json.decode(resp.body);
+        return jsonData['id'] as int?;
+      }
+      return null;
+    } catch (e) {
+      print('Error creating outfit post: $e');
+      return null;
+    }
+  }
+
+  Future<List<OutfitPost>> getFeedPostsRemote(String currentUserId, {int limit = 50}) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/outfit-posts/feed?userId=$currentUserId&limit=$limit');
+      final resp = await http
+          .get(url, headers: {'Content-Type': 'application/json'})
+          .timeout(const Duration(seconds: 10));
+      
+      if (resp.statusCode != 200) return [];
+      
+      final List<dynamic> jsonData = json.decode(resp.body);
+      final List<OutfitPost> posts = [];
+      
+      for (final postData in jsonData) {
+        try {
+          // Get clothing items for this post
+          final clothingIds = (postData['clothing_ids'] ?? postData['clothingIds']) as List<dynamic>?;
+          final List<Clothing> items = [];
+          
+          if (clothingIds != null) {
+            for (final id in clothingIds) {
+              final clothingData = await getClothingByIdRemote(id as int);
+              if (clothingData != null) {
+                items.add(Clothing.fromMap(clothingData));
+              }
+            }
+          }
+          
+          posts.add(OutfitPost.fromMap(postData as Map<String, dynamic>, items));
+        } catch (e) {
+          print('Error parsing post: $e');
+        }
+      }
+      
+      return posts;
+    } catch (e) {
+      print('Error getting feed posts: $e');
+      return [];
+    }
+  }
+
+  Future<void> toggleLikePostRemote(int postId, String userId) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/outfit-posts/$postId/like');
+      final body = json.encode({'userId': userId});
+      await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      print('Error toggling like: $e');
+    }
+  }
+
+  Future<List<OutfitPost>> getUserPostsRemote(String userId, {int limit = 20}) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/outfit-posts/user/$userId?limit=$limit');
+      final resp = await http
+          .get(url, headers: {'Content-Type': 'application/json'})
+          .timeout(const Duration(seconds: 10));
+      
+      if (resp.statusCode != 200) return [];
+      
+      final List<dynamic> jsonData = json.decode(resp.body);
+      final List<OutfitPost> posts = [];
+      
+      for (final postData in jsonData) {
+        try {
+          final clothingIds = (postData['clothing_ids'] ?? postData['clothingIds']) as List<dynamic>?;
+          final List<Clothing> items = [];
+          
+          if (clothingIds != null) {
+            for (final id in clothingIds) {
+              final clothingData = await getClothingByIdRemote(id as int);
+              if (clothingData != null) {
+                items.add(Clothing.fromMap(clothingData));
+              }
+            }
+          }
+          
+          posts.add(OutfitPost.fromMap(postData as Map<String, dynamic>, items));
+        } catch (e) {
+          print('Error parsing user post: $e');
+        }
+      }
+      
+      return posts;
+    } catch (e) {
+      print('Error getting user posts: $e');
+      return [];
+    }
+  }
+
+  Future<void> deleteOutfitPostRemote(int postId, String userId) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/outfit-posts/$postId');
+      final body = jsonEncode({'userId': userId});
+      await http
+          .delete(url, headers: {'Content-Type': 'application/json'}, body: body)
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      print('Error deleting post: $e');
+    }
+  }
+
+  Future<void> clearWornOutfitsRemote(String userId) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/worn-outfits/clear');
+      final body = jsonEncode({'userId': userId});
+      await http
+          .post(url, headers: {'Content-Type': 'application/json'}, body: body)
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      print('Error clearing worn outfits: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>?> getClothingByIdRemote(int id) async {
+    try {
+      final url = Uri.parse('$remoteApiBase/clothing/$id');
+      final resp = await http
+          .get(url, headers: {'Content-Type': 'application/json'})
+          .timeout(const Duration(seconds: 10));
+      
+      if (resp.statusCode != 200) return null;
+      
+      final decoded = json.decode(resp.body);
+      
+      if (decoded is List && decoded.isNotEmpty) {
+        return decoded[0] as Map<String, dynamic>;
+      }
+      
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      
+      return null;
+    } catch (e) {
+      print('Error getting clothing by ID: $e');
+      return null;
+    }
   }
 }
 

@@ -15,6 +15,8 @@ import 'pages/recommendations_page.dart';
 import 'pages/wardrobe_page.dart';
 import 'pages/create_outfit_page.dart';
 import 'pages/outfit_generator_page.dart';
+import 'pages/feed_page.dart';
+import 'widgets/splash_screen.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -119,87 +121,6 @@ class _AuthGateState extends State<AuthGate> {
   }
 }
 
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
-
-  @override
-  State<SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    )..repeat(reverse: true);
-
-    _animation = Tween<double>(begin: -10, end: 10).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeInOut,
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFFB86BFF),
-            Color(0xFF9747FF),
-          ],
-        ),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AnimatedBuilder(
-              animation: _animation,
-              builder: (context, child) {
-                return Transform.translate(
-                  offset: Offset(0, _animation.value),
-                  child: child,
-                );
-              },
-              child: Image.asset(
-                'assets/icon/logo.png',
-                width: 150,
-                height: 150,
-              ),
-            ),
-            const SizedBox(height: 40),
-            const SizedBox(
-              width: 50,
-              height: 50,
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                strokeWidth: 4,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _ContentViewState extends State<ContentView> {
   List<Clothing> clothes = [];
   bool showAddModal = false;
@@ -236,7 +157,7 @@ class _ContentViewState extends State<ContentView> {
     }
 
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Scaffold(
         body: Stack(
           children: [
@@ -249,6 +170,7 @@ class _ContentViewState extends State<ContentView> {
                   onAddPressed: () => setState(() => showAddModal = true),
                   onClothingTap: (clothing) => setState(() => selectedClothing = clothing),
                 ),
+                const FeedPage(),
                 OutfitGeneratorPage(
                   clothes: clothes,
                   onUpdate: _loadClothes,
@@ -271,6 +193,7 @@ class _ContentViewState extends State<ContentView> {
         bottomNavigationBar: const TabBar(
           tabs: [
             Tab(icon: Icon(Icons.checkroom), text: 'Wardrobe'),
+            Tab(icon: Icon(Icons.explore), text: 'Feed'),
             Tab(icon: Icon(Icons.style), text: 'Outfits'),
             Tab(icon: Icon(Icons.videogame_asset), text: 'Create'),
             Tab(icon: Icon(Icons.star), text: 'Shop'),

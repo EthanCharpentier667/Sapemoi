@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models.dart';
 import '../db_manager.dart';
 import '../outfit_generator.dart';
+import 'create_post_page.dart';
 
 class OutfitGeneratorPage extends StatefulWidget {
   final List<Clothing> clothes;
@@ -186,7 +187,8 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
                           if (shouldMark == true && mounted) {
                             final userModel = await AuthManager().getLocalUser();
                             if (userModel != null) {
-                              final ids = outfit.outfit.map((c) => c.id).toList();
+                              final items = outfit.outfit;
+                              final ids = items.map((c) => c.id).toList();
                               await DBManager().markOutfitAsUsed(ids, userModel.uid);
                               widget.onUpdate();
 
@@ -194,6 +196,8 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(content: Text('Outfit marked as worn!')),
                                 );
+                                
+                                _showPostOutfitDialog(items);
                               }
                             }
                           }
@@ -389,7 +393,10 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
         }
       }
 
-      if (byType.isEmpty) break;
+      if (byType.isEmpty) {
+        maxWearCount++;
+        continue;
+      }
 
       final previousCount = found.length;
       _generateSmartOutfits(byType, activeTypes.toList(), found, seenCombos, maxOutfits: 10);
@@ -501,6 +508,47 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
     if (compatibility >= 55) return Colors.blue;
     if (compatibility >= 40) return Colors.orange;
     return Colors.red;
+  }
+
+  void _showPostOutfitDialog(List<Clothing> items) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.photo_camera, color: Colors.purple[700]),
+            const SizedBox(width: 12),
+            const Text('Share Your Style?'),
+          ],
+        ),
+        content: const Text(
+          'Want to post this outfit to your feed?\n\nShow off your style and inspire others! 📸✨',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Not Now'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CreatePostPage(outfitItems: items),
+                ),
+              );
+            },
+            icon: const Icon(Icons.send),
+            label: const Text('Post It'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
