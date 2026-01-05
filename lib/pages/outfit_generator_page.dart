@@ -1,10 +1,8 @@
-import '../auth_manager.dart';
 import 'package:flutter/material.dart';
 
 import '../models.dart';
-import '../db_manager.dart';
 import '../outfit_generator.dart';
-import 'create_post_page.dart';
+import '../widgets/outfit_preview_sheet.dart';
 
 class OutfitGeneratorPage extends StatefulWidget {
   final List<Clothing> clothes;
@@ -166,41 +164,13 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
 
                       return GestureDetector(
                         onTap: () async {
-                          final shouldMark = await showDialog<bool>(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('Mark as Worn?'),
-                              content: const Text('Do you want to mark this outfit as used? This will help diversify future suggestions.'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, false),
-                                  child: const Text('Cancel'),
-                                ),
-                                ElevatedButton(
-                                  onPressed: () => Navigator.pop(context, true),
-                                  child: const Text('Mark as Worn'),
-                                ),
-                              ],
-                            ),
+                          await OutfitPreviewSheet.show(
+                            context,
+                            items: outfit.outfit,
+                            score: outfit.result,
+                            onWorn: widget.onUpdate,
+                            title: 'Generated Outfit',
                           );
-
-                          if (shouldMark == true && mounted) {
-                            final userModel = await AuthManager().getLocalUser();
-                            if (userModel != null) {
-                              final items = outfit.outfit;
-                              final ids = items.map((c) => c.id).toList();
-                              await DBManager().markOutfitAsUsed(ids, userModel.uid);
-                              widget.onUpdate();
-
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Outfit marked as worn!')),
-                                );
-                                
-                                _showPostOutfitDialog(items);
-                              }
-                            }
-                          }
                         },
                         child: Stack(
                           children: [
@@ -508,47 +478,6 @@ class _OutfitGeneratorPageState extends State<OutfitGeneratorPage> {
     if (compatibility >= 55) return Colors.blue;
     if (compatibility >= 40) return Colors.orange;
     return Colors.red;
-  }
-
-  void _showPostOutfitDialog(List<Clothing> items) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.photo_camera, color: Colors.purple[700]),
-            const SizedBox(width: 12),
-            const Text('Share Your Style?'),
-          ],
-        ),
-        content: const Text(
-          'Want to post this outfit to your feed?\n\nShow off your style and inspire others! 📸✨',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Not Now'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => CreatePostPage(outfitItems: items),
-                ),
-              );
-            },
-            icon: const Icon(Icons.send),
-            label: const Text('Post It'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
