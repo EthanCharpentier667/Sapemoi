@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models.dart';
 import '../outfit_generator.dart';
+import '../theme.dart';
 
 class ComplexOutfitPage extends StatefulWidget {
   final List<Clothing> clothes;
@@ -16,7 +17,7 @@ class ComplexOutfitPage extends StatefulWidget {
 }
 
 class _ComplexOutfitPageState extends State<ComplexOutfitPage> {
-  List<Clothing> _selectedItems = [];
+  final List<Clothing> _selectedItems = [];
   OutfitResult? _result;
   String? _selectedSlotKey;
 
@@ -55,9 +56,9 @@ class _ComplexOutfitPageState extends State<ComplexOutfitPage> {
   void _evaluateOutfit() {
     if (_selectedItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select at least one item'),
-          backgroundColor: Colors.orange,
+        SnackBar(
+          content: const Text('Please select at least one item'),
+          backgroundColor: SapemoiTheme.surface,
         ),
       );
       return;
@@ -69,12 +70,12 @@ class _ComplexOutfitPageState extends State<ComplexOutfitPage> {
 
   Color _getLayerColor(int layer) {
     switch (layer) {
-      case 0: return Colors.blue.shade400;
-      case 1: return Colors.green.shade500;
-      case 2: return Colors.orange.shade500;
-      case 3: return Colors.red.shade500;
-      case 4: return Colors.purple.shade400;
-      default: return Colors.grey;
+      case 0: return SapemoiTheme.primaryDark;
+      case 1: return SapemoiTheme.primary;
+      case 2: return SapemoiTheme.primaryLight;
+      case 3: return SapemoiTheme.primaryMuted;
+      case 4: return SapemoiTheme.textSecondary;
+      default: return SapemoiTheme.textMuted;
     }
   }
 
@@ -114,27 +115,16 @@ class _ComplexOutfitPageState extends State<ComplexOutfitPage> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: SapemoiTheme.surface,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: SapemoiTheme.border),
       ),
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  _getLayerColor(layer),
-                  _getLayerColor(layer).withOpacity(0.7),
-                ],
-              ),
+              color: _getLayerColor(layer),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: Row(
@@ -479,39 +469,35 @@ class _ComplexOutfitPageState extends State<ComplexOutfitPage> {
   Widget _buildResultCard() {
     if (_result == null) return const SizedBox.shrink();
 
-    final color = _result!.valid ? Colors.green : Colors.orange;
+    final isValid = _result!.valid;
 
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color.shade50, color.shade100],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: SapemoiTheme.surface,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        border: Border.all(
+          color: isValid ? SapemoiTheme.primary.withOpacity(0.5) : SapemoiTheme.border,
+        ),
       ),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(_result!.valid ? Icons.check_circle : Icons.warning, color: color, size: 32),
+              Icon(
+                isValid ? Icons.check_circle : Icons.info_outline,
+                color: isValid ? SapemoiTheme.primary : SapemoiTheme.textSecondary,
+                size: 32,
+              ),
               const SizedBox(width: 12),
               Text(
-                _result!.valid ? 'Valid Outfit!' : 'Has Issues',
+                isValid ? 'Valid Outfit!' : 'Has Issues',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: color.shade700,
+                  color: SapemoiTheme.textPrimary,
                 ),
               ),
             ],
@@ -522,14 +508,14 @@ class _ComplexOutfitPageState extends State<ComplexOutfitPage> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: color.shade700,
+              color: SapemoiTheme.primary,
             ),
           ),
           if (_result!.clashes.isNotEmpty) ...[
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Color Clashes:',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: SapemoiTheme.textPrimary),
             ),
             const SizedBox(height: 8),
             ..._result!.clashes.map((clash) {
@@ -537,10 +523,10 @@ class _ComplexOutfitPageState extends State<ComplexOutfitPage> {
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Text(
                   '• ${clash.type1} ↔ ${clash.type2}',
-                  style: const TextStyle(fontSize: 14),
+                  style: TextStyle(fontSize: 14, color: SapemoiTheme.textSecondary),
                 ),
               );
-            }).toList(),
+            }),
           ],
         ],
       ),
@@ -565,7 +551,7 @@ class _ComplexOutfitPageState extends State<ComplexOutfitPage> {
                           _buildLayerSection(2),
                           _buildLayerSection(3),
                           _buildLayerSection(4),
-                          const SizedBox(height: 80),
+                          const SizedBox(height: 140),
                         ],
                       ),
                     ),

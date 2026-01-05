@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io' show Platform;
 import '../auth_manager.dart';
+import '../theme.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,6 +15,7 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _isSignUp = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -32,7 +34,10 @@ class _LoginPageState extends State<LoginPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: SapemoiTheme.surface,
+          ),
         );
       }
     } finally {
@@ -50,7 +55,10 @@ class _LoginPageState extends State<LoginPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: SapemoiTheme.surface,
+          ),
         );
       }
     } finally {
@@ -61,7 +69,10 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _signInWithEmail() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields')),
+        SnackBar(
+          content: const Text('Please fill all fields'),
+          backgroundColor: SapemoiTheme.surface,
+        ),
       );
       return;
     }
@@ -85,7 +96,10 @@ class _LoginPageState extends State<LoginPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: SapemoiTheme.surface,
+          ),
         );
       }
     } finally {
@@ -96,6 +110,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: SapemoiTheme.background,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -103,18 +118,38 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo
-                const Icon(
-                  Icons.checkroom_rounded,
-                  size: 100,
-                  color: Colors.purple,
+                // Logo avec glow
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: SapemoiTheme.primaryGradient,
+                    boxShadow: [
+                      BoxShadow(
+                        color: SapemoiTheme.primary.withOpacity(0.4),
+                        blurRadius: 40,
+                        spreadRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.checkroom_rounded,
+                    size: 60,
+                    color: Colors.white,
+                  ),
                 ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Sapemoi',
-                  style: TextStyle(
-                    fontSize: 40,
-                    fontWeight: FontWeight.bold,
+                const SizedBox(height: 32),
+                
+                // Titre avec gradient
+                ShaderMask(
+                  shaderCallback: (bounds) => SapemoiTheme.primaryGradient.createShader(bounds),
+                  child: const Text(
+                    'Sapemoi',
+                    style: TextStyle(
+                      fontSize: 42,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -122,54 +157,64 @@ class _LoginPageState extends State<LoginPage> {
                   'Organize your wardrobe',
                   style: TextStyle(
                     fontSize: 16,
-                    color: Colors.grey[600],
+                    color: SapemoiTheme.textMuted,
                   ),
                 ),
                 const SizedBox(height: 48),
 
                 // Email Field
-                TextField(
+                _buildTextField(
                   controller: _emailController,
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: const Icon(Icons.email),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                  label: 'Email',
+                  icon: Icons.email_outlined,
                   keyboardType: TextInputType.emailAddress,
-                  enabled: !_isLoading,
                 ),
                 const SizedBox(height: 16),
 
                 // Password Field
-                TextField(
+                _buildTextField(
                   controller: _passwordController,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: const Icon(Icons.lock),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  label: 'Password',
+                  icon: Icons.lock_outline,
+                  obscureText: _obscurePassword,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      color: SapemoiTheme.textMuted,
+                      size: 20,
                     ),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                   ),
-                  obscureText: true,
-                  enabled: !_isLoading,
                 ),
                 const SizedBox(height: 24),
 
                 // Email Sign In/Up Button
                 if (_isLoading)
-                  const CircularProgressIndicator()
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    child: CircularProgressIndicator(color: SapemoiTheme.primary),
+                  )
                 else
-                  ElevatedButton(
-                    onPressed: _signInWithEmail,
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(50),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                  GestureDetector(
+                    onTap: _signInWithEmail,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      decoration: BoxDecoration(
+                        gradient: SapemoiTheme.primaryGradient,
+                        borderRadius: BorderRadius.circular(SapemoiTheme.radiusMd),
+                        boxShadow: [SapemoiTheme.shadowGlow(SapemoiTheme.primary)],
+                      ),
+                      child: Text(
+                        _isSignUp ? 'Sign Up' : 'Sign In',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                    child: Text(_isSignUp ? 'Sign Up' : 'Sign In'),
                   ),
                 const SizedBox(height: 16),
 
@@ -182,57 +227,124 @@ class _LoginPageState extends State<LoginPage> {
                     _isSignUp
                         ? 'Already have an account? Sign In'
                         : 'Don\'t have an account? Sign Up',
+                    style: TextStyle(
+                      color: SapemoiTheme.textSecondary,
+                    ),
                   ),
                 ),
 
                 const SizedBox(height: 32),
-                const Row(
+                
+                // Divider
+                Row(
                   children: [
-                    Expanded(child: Divider()),
+                    Expanded(child: Divider(color: SapemoiTheme.border)),
                     Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text('OR'),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'OR',
+                        style: TextStyle(
+                          color: SapemoiTheme.textMuted,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ),
-                    Expanded(child: Divider()),
+                    Expanded(child: Divider(color: SapemoiTheme.border)),
                   ],
                 ),
                 const SizedBox(height: 32),
 
                 // Google Sign In
-                OutlinedButton.icon(
-                  onPressed: _isLoading ? null : _signInWithGoogle,
+                _buildSocialButton(
+                  onTap: _isLoading ? null : _signInWithGoogle,
                   icon: Image.asset(
                     'assets/google_logo.png',
-                    height: 24,
+                    height: 22,
                     errorBuilder: (context, error, stack) =>
-                        const Icon(Icons.g_mobiledata, size: 24),
+                        const Icon(Icons.g_mobiledata, size: 22, color: Colors.white),
                   ),
-                  label: const Text('Continue with Google'),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(50),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                  label: 'Continue with Google',
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
 
                 // Apple Sign In (iOS only)
                 if (Platform.isIOS)
-                  OutlinedButton.icon(
-                    onPressed: _isLoading ? null : _signInWithApple,
-                    icon: const Icon(Icons.apple, size: 24),
-                    label: const Text('Continue with Apple'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(50),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
+                  _buildSocialButton(
+                    onTap: _isLoading ? null : _signInWithApple,
+                    icon: const Icon(Icons.apple, size: 22, color: Colors.white),
+                    label: 'Continue with Apple',
                   ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType? keyboardType,
+    bool obscureText = false,
+    Widget? suffixIcon,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: SapemoiTheme.surface,
+        borderRadius: BorderRadius.circular(SapemoiTheme.radiusMd),
+        border: Border.all(color: SapemoiTheme.border),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        obscureText: obscureText,
+        enabled: !_isLoading,
+        style: TextStyle(color: SapemoiTheme.textPrimary),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(color: SapemoiTheme.textMuted),
+          prefixIcon: Icon(icon, color: SapemoiTheme.textMuted, size: 20),
+          suffixIcon: suffixIcon,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          floatingLabelStyle: TextStyle(color: SapemoiTheme.primary),
+        ),
+        cursorColor: SapemoiTheme.primary,
+      ),
+    );
+  }
+
+  Widget _buildSocialButton({
+    required VoidCallback? onTap,
+    required Widget icon,
+    required String label,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: SapemoiTheme.surface,
+          borderRadius: BorderRadius.circular(SapemoiTheme.radiusMd),
+          border: Border.all(color: SapemoiTheme.border),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            icon,
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: TextStyle(
+                color: SapemoiTheme.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ),
       ),
     );

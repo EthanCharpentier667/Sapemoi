@@ -4,6 +4,7 @@ import '../models.dart';
 import '../recommendation_engine.dart';
 import '../db_manager.dart';
 import '../auth_manager.dart';
+import '../theme.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class RecommendationsPage extends StatefulWidget {
@@ -143,7 +144,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                         if (userStyle != null) _buildStyleHeader(),
                         Expanded(
                           child: ListView.builder(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
                             itemCount: recommendations.length,
                             itemBuilder: (context, index) {
                               return _buildRecommendationCard(recommendations[index]);
@@ -160,33 +161,23 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.purple.shade400, Colors.purple.shade600],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: SapemoiTheme.surface,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.purple.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: SapemoiTheme.primary.withOpacity(0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.style, color: Colors.white, size: 28),
+              Icon(Icons.style, color: SapemoiTheme.primary, size: 28),
               const SizedBox(width: 12),
               Text(
                 'Your Style: ${_capitalizeFirst(userStyle!.styleType)}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: SapemoiTheme.textPrimary,
                 ),
               ),
             ],
@@ -195,12 +186,12 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           if (userStyle!.topBrands.isNotEmpty)
             Row(
               children: [
-                const Icon(Icons.favorite, color: Colors.white70, size: 18),
+                Icon(Icons.favorite, color: SapemoiTheme.textMuted, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Favorite brands: ${userStyle!.topBrands.map((b) => _capitalizeFirst(b)).join(", ")}',
-                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                    style: TextStyle(color: SapemoiTheme.textSecondary, fontSize: 14),
                   ),
                 ),
               ],
@@ -222,11 +213,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.orange.shade400, Colors.deepOrange.shade600],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              color: SapemoiTheme.primary,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             ),
             child: Row(
@@ -249,9 +236,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Text('${rec.currentScore.toInt()}%', style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+                          Text('${rec.currentScore.toInt()}%', style: TextStyle(color: Colors.white.withOpacity(0.7), fontWeight: FontWeight.bold)),
                           const SizedBox(width: 8),
-                          const Icon(Icons.arrow_forward, color: Colors.white70, size: 16),
+                          Icon(Icons.arrow_forward, color: Colors.white.withOpacity(0.7), size: 16),
                           const SizedBox(width: 8),
                           Text('${rec.potentialScore.toInt()}%', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
                         ],

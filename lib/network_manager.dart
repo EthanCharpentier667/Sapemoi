@@ -290,8 +290,9 @@ class NetworkManager {
       final resp = await http.get(url).timeout(const Duration(seconds: 10));
       if (resp.statusCode != 200) return [];
       final jsonData = json.decode(resp.body);
-      if (jsonData is List)
+      if (jsonData is List) {
         return List<int>.from(jsonData.map((e) => e as int));
+      }
       return [];
     } catch (e) {
 
@@ -607,8 +608,7 @@ class NetworkManager {
               raw['Shopify'] ??
               raw['shopify'] ??
               raw['ShopifyLink'] ??
-              raw['shopify_link'] ??
-              null,
+              raw['shopify_link'],
         };
         print('✅ Returning normalized google result: $normalized');
         return normalized;
@@ -659,8 +659,7 @@ class NetworkManager {
               raw['Shopify'] ??
               raw['shopify'] ??
               raw['ShopifyLink'] ??
-              raw['shopify_link'] ??
-              null,
+              raw['shopify_link'],
         };
         print('✅ Returning normalized google result (from map): $normalized');
         return normalized;

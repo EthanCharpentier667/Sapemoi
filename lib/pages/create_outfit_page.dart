@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../outfit_generator.dart';
+import '../theme.dart';
 import '../widgets/outfit_preview_sheet.dart';
 import 'complex_outfit_page.dart';
 
@@ -36,7 +37,6 @@ class _CreateOutfitPageState extends State<CreateOutfitPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Create Outfit'),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -112,22 +112,9 @@ class _QuickOutfitTabState extends State<_QuickOutfitTab> {
                     margin: const EdgeInsets.symmetric(horizontal: 20),
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          _getCompatibilityColor((100 - customOutfitScore!.score).toInt()).shade50,
-                          _getCompatibilityColor((100 - customOutfitScore!.score).toInt()).shade100,
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                      color: SapemoiTheme.surface,
                       borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _getCompatibilityColor((100 - customOutfitScore!.score).toInt()).withOpacity(0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
+                      border: Border.all(color: SapemoiTheme.primary.withOpacity(0.3)),
                     ),
                     child: Column(
                       children: [
@@ -135,8 +122,20 @@ class _QuickOutfitTabState extends State<_QuickOutfitTab> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              '${(100 - customOutfitScore!.score).toInt()}% ',
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              '${(100 - customOutfitScore!.score).toInt()}%',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: SapemoiTheme.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Match',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: SapemoiTheme.textSecondary,
+                              ),
                             ),
                           ],
                         ),
@@ -160,7 +159,7 @@ class _QuickOutfitTabState extends State<_QuickOutfitTab> {
                       ],
                     ),
                   ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 100),
               ],
             ),
           ),
@@ -622,11 +621,11 @@ class _QuickOutfitTabState extends State<_QuickOutfitTab> {
   }
 
   MaterialColor _getCompatibilityColor(int compatibility) {
-    if (compatibility >= 90) return Colors.green;
-    if (compatibility >= 75) return Colors.lightGreen;
-    if (compatibility >= 60) return Colors.lime;
-    if (compatibility >= 45) return Colors.orange;
-    if (compatibility >= 30) return Colors.deepOrange;
-    return Colors.red;
+    if (compatibility >= 90) return Colors.purple;
+    if (compatibility >= 75) return Colors.purple;
+    if (compatibility >= 60) return Colors.purple;
+    if (compatibility >= 45) return Colors.grey;
+    if (compatibility >= 30) return Colors.grey;
+    return Colors.grey;
   }
 }

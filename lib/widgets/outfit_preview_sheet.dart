@@ -4,6 +4,7 @@ import '../models.dart';
 import '../db_manager.dart';
 import '../auth_manager.dart';
 import '../outfit_generator.dart';
+import '../theme.dart';
 import '../pages/create_post_page.dart';
 
 class OutfitPreviewSheet extends StatefulWidget {
@@ -108,12 +109,12 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
   }
 
   Color _getScoreColor(int score) {
-    if (score >= 85) return Colors.green;
-    if (score >= 75) return Colors.lightGreen;
-    if (score >= 60) return Colors.lime;
-    if (score >= 45) return Colors.orange;
-    if (score >= 30) return Colors.deepOrange;
-    return Colors.red;
+    if (score >= 85) return const Color(0xFF22C55E);
+    if (score >= 75) return const Color(0xFF84CC16);
+    if (score >= 60) return SapemoiTheme.primary;
+    if (score >= 45) return const Color(0xFFF97316);
+    if (score >= 30) return const Color(0xFFEF4444);
+    return const Color(0xFFDC2626);
   }
 
   String _getScoreLabel(int score) {
@@ -151,33 +152,43 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: SapemoiTheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(SapemoiTheme.radiusLg),
+        ),
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.purple.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                gradient: SapemoiTheme.primaryGradient,
+                borderRadius: BorderRadius.circular(SapemoiTheme.radiusSm),
               ),
-              child: Icon(Icons.photo_camera, color: Colors.purple[700]),
+              child: const Icon(Icons.photo_camera, color: Colors.white, size: 20),
             ),
             const SizedBox(width: 12),
-            const Expanded(
+            Expanded(
               child: Text(
                 'Share Your Style?',
-                style: TextStyle(fontSize: 18),
+                style: TextStyle(
+                  fontSize: 18,
+                  color: SapemoiTheme.textPrimary,
+                ),
               ),
             ),
           ],
         ),
-        content: const Text(
+        content: Text(
           'Want to post this outfit to your feed?\n\nShow off your style and inspire others! 📸✨',
+          style: TextStyle(color: SapemoiTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Not Now'),
+            child: Text(
+              'Not Now',
+              style: TextStyle(color: SapemoiTheme.textMuted),
+            ),
           ),
           ElevatedButton.icon(
             onPressed: () {
@@ -189,12 +200,14 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
                 ),
               );
             },
-            icon: const Icon(Icons.send),
+            icon: const Icon(Icons.send, size: 16),
             label: const Text('Post It'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple,
+              backgroundColor: SapemoiTheme.primary,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(SapemoiTheme.radiusSm),
+              ),
             ),
           ),
         ],
@@ -213,9 +226,11 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: SapemoiTheme.surface,
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(SapemoiTheme.radiusXl),
+        ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -226,7 +241,7 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey[300],
+              color: SapemoiTheme.border,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -241,9 +256,10 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
                     Expanded(
                       child: Text(
                         widget.title ?? 'Outfit Preview',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
+                          color: SapemoiTheme.textPrimary,
                         ),
                       ),
                     ),
@@ -251,20 +267,9 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              _getScoreColor(compatibility).withOpacity(0.8),
-                              _getScoreColor(compatibility),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: _getScoreColor(compatibility).withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
+                          gradient: SapemoiTheme.primaryGradient,
+                          borderRadius: BorderRadius.circular(SapemoiTheme.radiusFull),
+                          boxShadow: [SapemoiTheme.shadowGlow(SapemoiTheme.primary)],
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -289,22 +294,29 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
                   ],
                 ),
                 if (compatibility != null) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
-                      Text(
-                        _getScoreLabel(compatibility),
-                        style: TextStyle(
-                          color: _getScoreColor(compatibility),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _getScoreColor(compatibility).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(SapemoiTheme.radiusFull),
+                        ),
+                        child: Text(
+                          _getScoreLabel(compatibility),
+                          style: TextStyle(
+                            color: _getScoreColor(compatibility),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                       const Spacer(),
                       Text(
                         '${widget.items.length} pieces',
                         style: TextStyle(
-                          color: Colors.grey[600],
+                          color: SapemoiTheme.textMuted,
                           fontSize: 14,
                         ),
                       ),
@@ -316,19 +328,19 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                      color: const Color(0xFFF97316).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(SapemoiTheme.radiusSm),
+                      border: Border.all(color: const Color(0xFFF97316).withOpacity(0.3)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.warning_amber, color: Colors.orange, size: 18),
+                        const Icon(Icons.warning_amber, color: Color(0xFFF97316), size: 18),
                         const SizedBox(width: 8),
                         Text(
                           '$recentlyWornCount item${recentlyWornCount > 1 ? 's' : ''} worn this week',
                           style: const TextStyle(
-                            color: Colors.orange,
+                            color: Color(0xFFF97316),
                             fontWeight: FontWeight.w600,
                             fontSize: 13,
                           ),
@@ -341,7 +353,7 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
             ),
           ),
 
-          const Divider(height: 1),
+          Divider(height: 1, color: SapemoiTheme.border),
 
           // Liste des items par type
           Flexible(
@@ -367,26 +379,36 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
                 bottom: 16 + MediaQuery.of(context).padding.bottom,
               ),
               decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, -5),
-                  ),
-                ],
+                color: SapemoiTheme.background,
+                border: Border(
+                  top: BorderSide(color: SapemoiTheme.border),
+                ),
               ),
               child: Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => Navigator.pop(context, false),
-                      icon: const Icon(Icons.close),
-                      label: const Text('Close'),
-                      style: OutlinedButton.styleFrom(
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context, false),
+                      child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                        decoration: BoxDecoration(
+                          color: SapemoiTheme.surface,
+                          borderRadius: BorderRadius.circular(SapemoiTheme.radiusMd),
+                          border: Border.all(color: SapemoiTheme.border),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.close, color: SapemoiTheme.textSecondary, size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Close',
+                              style: TextStyle(
+                                color: SapemoiTheme.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -394,25 +416,46 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     flex: 2,
-                    child: ElevatedButton.icon(
-                      onPressed: _isMarking ? null : _markAsWorn,
-                      icon: _isMarking
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.check_circle),
-                      label: Text(_isMarking ? 'Marking...' : 'Mark as Worn'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
+                    child: GestureDetector(
+                      onTap: _isMarking ? null : _markAsWorn,
+                      child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF22C55E), Color(0xFF16A34A)],
+                          ),
+                          borderRadius: BorderRadius.circular(SapemoiTheme.radiusMd),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF22C55E).withOpacity(0.3),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _isMarking
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.check_circle, color: Colors.white, size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              _isMarking ? 'Marking...' : 'Mark as Worn',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -440,10 +483,10 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(10),
+                  color: SapemoiTheme.surfaceLight,
+                  borderRadius: BorderRadius.circular(SapemoiTheme.radiusSm),
                 ),
-                child: Icon(icon, size: 20, color: Colors.grey[700]),
+                child: Icon(icon, size: 20, color: SapemoiTheme.textSecondary),
               ),
               const SizedBox(width: 12),
               Text(
@@ -451,7 +494,7 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: Colors.grey[700],
+                  color: SapemoiTheme.textSecondary,
                 ),
               ),
               if (items.length > 1) ...[
@@ -459,14 +502,14 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.purple.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
+                    color: SapemoiTheme.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(SapemoiTheme.radiusFull),
                   ),
                   child: Text(
                     '×${items.length}',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.purple[700],
+                      color: SapemoiTheme.primary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -478,7 +521,7 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
           
           // Items grid
           SizedBox(
-            height: 120,
+            height: 130,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: items.length,
@@ -498,19 +541,14 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
     return Container(
       width: 100,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: SapemoiTheme.surfaceLight,
+        borderRadius: BorderRadius.circular(SapemoiTheme.radiusMd),
         border: Border.all(
-          color: isRecentlyWorn ? Colors.orange.withOpacity(0.5) : Colors.grey[200]!,
+          color: isRecentlyWorn 
+            ? const Color(0xFFF97316).withOpacity(0.5) 
+            : SapemoiTheme.border,
           width: isRecentlyWorn ? 2 : 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -520,24 +558,29 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
             child: Stack(
               children: [
                 ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(SapemoiTheme.radiusMd - 1),
+                  ),
                   child: CachedNetworkImage(
                     imageUrl: item.imageUrl,
                     fit: BoxFit.cover,
                     width: double.infinity,
                     placeholder: (context, url) => Container(
-                      color: Colors.grey[100],
-                      child: const Center(
+                      color: SapemoiTheme.surface,
+                      child: Center(
                         child: SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: SapemoiTheme.primary,
+                          ),
                         ),
                       ),
                     ),
                     errorWidget: (context, url, error) => Container(
-                      color: Colors.grey[200],
-                      child: Icon(Icons.checkroom, color: Colors.grey[400]),
+                      color: SapemoiTheme.surface,
+                      child: Icon(Icons.checkroom, color: SapemoiTheme.textMuted),
                     ),
                   ),
                 ),
@@ -548,8 +591,8 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: Colors.orange,
-                        borderRadius: BorderRadius.circular(8),
+                        color: const Color(0xFFF97316),
+                        borderRadius: BorderRadius.circular(SapemoiTheme.radiusXs),
                       ),
                       child: const Icon(
                         Icons.history,
@@ -572,7 +615,7 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
                   item.brand,
                   style: TextStyle(
                     fontSize: 10,
-                    color: Colors.grey[500],
+                    color: SapemoiTheme.primary,
                     fontWeight: FontWeight.w600,
                   ),
                   maxLines: 1,
@@ -581,9 +624,10 @@ class _OutfitPreviewSheetState extends State<OutfitPreviewSheet> {
                 const SizedBox(height: 2),
                 Text(
                   item.name,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
+                    color: SapemoiTheme.textPrimary,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

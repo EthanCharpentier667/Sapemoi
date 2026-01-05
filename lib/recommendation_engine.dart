@@ -87,8 +87,9 @@ class RecommendationEngine {
 
       for (final type in byType.keys) {
         final t = type.toLowerCase();
-        if (t == 'top' || t == 'bottom' || t == missingType || t == 'footwear')
+        if (t == 'top' || t == 'bottom' || t == missingType || t == 'footwear') {
           continue;
+        }
         if (byType[t]!.isNotEmpty && random.nextDouble() > 0.3) {
           fullOutfit.add(byType[t]![random.nextInt(byType[t]!.length)]);
         }

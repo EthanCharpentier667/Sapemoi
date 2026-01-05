@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models.dart';
 import '../db_manager.dart';
 import '../auth_manager.dart';
+import '../theme.dart';
 
 class FeedPage extends StatefulWidget {
   const FeedPage({super.key});
@@ -15,7 +16,6 @@ class _FeedPageState extends State<FeedPage> {
   final PageController _pageController = PageController();
   List<OutfitPost> _posts = [];
   bool _isLoading = true;
-  int _currentIndex = 0;
   final Map<int, bool> _expandedDescriptions = {};
 
   @override
@@ -67,26 +67,51 @@ class _FeedPageState extends State<FeedPage> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        backgroundColor: SapemoiTheme.background,
+        body: Center(
+          child: CircularProgressIndicator(color: SapemoiTheme.primary),
+        ),
       );
     }
 
     if (_posts.isEmpty) {
       return Scaffold(
+        backgroundColor: SapemoiTheme.background,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.style_outlined, size: 80, color: Colors.grey[400]),
-              const SizedBox(height: 16),
-              Text(
+              Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  color: SapemoiTheme.surfaceLight,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.explore_outlined,
+                  size: 56,
+                  color: SapemoiTheme.textMuted,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
                 'No outfits yet',
-                style: TextStyle(fontSize: 20, color: Colors.grey[600]),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: SapemoiTheme.textPrimary,
+                ),
               ),
               const SizedBox(height: 8),
-              Text(
+              const Text(
                 'Be the first to share your style!',
-                style: TextStyle(color: Colors.grey[500]),
+                style: TextStyle(color: SapemoiTheme.textMuted),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _loadFeed,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Refresh'),
               ),
             ],
           ),
@@ -95,13 +120,13 @@ class _FeedPageState extends State<FeedPage> {
     }
 
     return Scaffold(
+      backgroundColor: SapemoiTheme.background,
       body: PageView.builder(
         controller: _pageController,
         scrollDirection: Axis.vertical,
         itemCount: _posts.length,
         onPageChanged: (index) {
           setState(() {
-            _currentIndex = index;
             _expandedDescriptions.clear();
           });
         },
@@ -118,29 +143,35 @@ class _FeedPageState extends State<FeedPage> {
       child: Stack(
         fit: StackFit.expand,
         children: [
+          // Background image
           CachedNetworkImage(
             imageUrl: post.imageUrl,
             fit: BoxFit.contain,
             placeholder: (context, url) => Container(
-              color: Colors.black,
-              child: const Center(child: CircularProgressIndicator()),
+              color: SapemoiTheme.background,
+              child: const Center(
+                child: CircularProgressIndicator(color: SapemoiTheme.primary),
+              ),
             ),
             errorWidget: (context, url, error) => Container(
-              color: Colors.black,
-              child: const Icon(Icons.error, color: Colors.white),
+              color: SapemoiTheme.background,
+              child: const Icon(Icons.error, color: SapemoiTheme.textMuted),
             ),
           ),
           
+          // Gradient overlay
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
+                  Colors.black.withOpacity(0.3),
                   Colors.transparent,
-                  Colors.black.withOpacity(0.7),
+                  Colors.transparent,
+                  Colors.black.withOpacity(0.8),
                 ],
-                stops: const [0.5, 1.0],
+                stops: const [0.0, 0.2, 0.6, 1.0],
               ),
             ),
           ),
@@ -148,27 +179,37 @@ class _FeedPageState extends State<FeedPage> {
           SafeArea(
             child: Column(
               children: [
-                Container(
-                  color: Colors.black.withOpacity(0.3),
+                // Header
+                Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Row(
                     children: [
-                      CircleAvatar(
-                        radius: 20,
-                        backgroundColor: Colors.purple,
-                        backgroundImage: post.photoURL != null
-                            ? CachedNetworkImageProvider(post.photoURL!)
-                            : null,
-                        child: post.photoURL == null
-                            ? Text(
-                                post.username[0].toUpperCase(),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
-                            : null,
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: SapemoiTheme.primary,
+                            width: 2,
+                          ),
+                          boxShadow: [SapemoiTheme.shadowGlow(SapemoiTheme.primary)],
+                        ),
+                        child: CircleAvatar(
+                          radius: 22,
+                          backgroundColor: SapemoiTheme.surfaceLight,
+                          backgroundImage: post.photoURL != null
+                              ? CachedNetworkImageProvider(post.photoURL!)
+                              : null,
+                          child: post.photoURL == null
+                              ? Text(
+                                  post.username[0].toUpperCase(),
+                                  style: const TextStyle(
+                                    color: SapemoiTheme.primary,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                )
+                              : null,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -181,20 +222,35 @@ class _FeedPageState extends State<FeedPage> {
                                 color: Colors.white,
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                shadows: [
-                                  Shadow(
-                                    offset: Offset(0, 1),
-                                    blurRadius: 3,
-                                    color: Colors.black,
-                                  ),
-                                ],
                               ),
                             ),
                             Text(
                               _formatTime(post.createdAt),
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.8),
+                                color: Colors.white.withOpacity(0.7),
                                 fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: SapemoiTheme.surface.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(SapemoiTheme.radiusFull),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.checkroom, size: 14, color: SapemoiTheme.primary),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${post.clothingItems.length}',
+                              style: const TextStyle(
+                                color: SapemoiTheme.textPrimary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ],
@@ -206,6 +262,7 @@ class _FeedPageState extends State<FeedPage> {
                 
                 const Spacer(),
 
+                // Bottom content
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
@@ -228,6 +285,7 @@ class _FeedPageState extends State<FeedPage> {
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 14,
+                                  height: 1.4,
                                 ),
                                 maxLines: _expandedDescriptions[post.id] ?? false ? null : 2,
                                 overflow: _expandedDescriptions[post.id] ?? false 
@@ -240,7 +298,7 @@ class _FeedPageState extends State<FeedPage> {
                                   child: Text(
                                     '...more',
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.7),
+                                      color: SapemoiTheme.primary.withOpacity(0.9),
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -249,23 +307,21 @@ class _FeedPageState extends State<FeedPage> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 16),
                       ],
                       
+                      // Tags
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
                         children: post.clothingItems.map((item) {
                           return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.5),
-                              borderRadius: BorderRadius.circular(20),
+                              color: SapemoiTheme.surface.withOpacity(0.85),
+                              borderRadius: BorderRadius.circular(SapemoiTheme.radiusFull),
                               border: Border.all(
-                                color: Colors.white.withOpacity(0.3),
+                                color: SapemoiTheme.border.withOpacity(0.5),
                               ),
                             ),
                             child: Row(
@@ -274,15 +330,15 @@ class _FeedPageState extends State<FeedPage> {
                                 Icon(
                                   _getIconForType(item.type),
                                   size: 14,
-                                  color: Colors.white,
+                                  color: SapemoiTheme.primary,
                                 ),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 8),
                                 Text(
-                                  '${item.brand} - ${item.name}',
+                                  item.brand,
                                   style: const TextStyle(
-                                    color: Colors.white,
+                                    color: SapemoiTheme.textPrimary,
                                     fontSize: 12,
-                                    fontWeight: FontWeight.w500,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ],
@@ -293,39 +349,46 @@ class _FeedPageState extends State<FeedPage> {
                     ],
                   ),
                 ),
+              
+                // Bottom padding for nav bar
+                const SizedBox(height: 80),
               ],
             ),
           ),
           
+          // Action buttons
           Positioned(
             right: 12,
-            bottom: 200,
+            bottom: 180,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 _buildActionButton(
                   icon: post.isLiked ? Icons.favorite : Icons.favorite_border,
                   label: _formatCount(post.likes),
-                  color: post.isLiked ? Colors.red : Colors.white,
+                  color: post.isLiked ? SapemoiTheme.accent : Colors.white,
                   onTap: () => _toggleLike(post),
                 ),
                 const SizedBox(height: 20),
                 _buildActionButton(
-                  icon: Icons.comment,
+                  icon: Icons.chat_bubble_outline,
                   label: _formatCount(post.comments),
                   color: Colors.white,
-                  onTap: () {
-                    // TODO: Ouvrir les commentaires
-                  },
+                  onTap: () {},
                 ),
                 const SizedBox(height: 20),
                 _buildActionButton(
-                  icon: Icons.share,
+                  icon: Icons.send_outlined,
                   label: 'Share',
                   color: Colors.white,
-                  onTap: () {
-                    // TODO: Partager
-                  },
+                  onTap: () {},
+                ),
+                const SizedBox(height: 20),
+                _buildActionButton(
+                  icon: Icons.bookmark_border,
+                  label: 'Save',
+                  color: Colors.white,
+                  onTap: () {},
                 ),
               ],
             ),
@@ -346,28 +409,22 @@ class _FeedPageState extends State<FeedPage> {
       child: Column(
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: 50,
+            height: 50,
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.3),
+              color: SapemoiTheme.surface.withOpacity(0.6),
               shape: BoxShape.circle,
+              border: Border.all(color: SapemoiTheme.border.withOpacity(0.3)),
             ),
-            child: Icon(icon, color: color, size: 28),
+            child: Icon(icon, color: color, size: 26),
           ),
           const SizedBox(height: 4),
           Text(
             label,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w600,
-              shadows: [
-                Shadow(
-                  offset: Offset(0, 1),
-                  blurRadius: 2,
-                  color: Colors.black,
-                ),
-              ],
             ),
           ),
         ],
@@ -403,20 +460,13 @@ class _FeedPageState extends State<FeedPage> {
 
   IconData _getIconForType(String type) {
     switch (type.toLowerCase()) {
-      case 'top':
-        return Icons.dry_cleaning;
-      case 'bottom':
-        return Icons.shopping_bag;
-      case 'footwear':
-        return Icons.sports_soccer;
-      case 'headwear':
-        return Icons.sports_baseball;
-      case 'outerwear':
-        return Icons.checkroom;
-      case 'accessory':
-        return Icons.watch;
-      default:
-        return Icons.checkroom;
+      case 'top': return Icons.dry_cleaning;
+      case 'bottom': return Icons.straighten;
+      case 'footwear': return Icons.directions_walk;
+      case 'headwear': return Icons.face;
+      case 'outerwear': return Icons.ac_unit;
+      case 'accessory': return Icons.watch;
+      default: return Icons.checkroom;
     }
   }
 }

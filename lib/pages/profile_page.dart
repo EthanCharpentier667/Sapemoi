@@ -7,6 +7,7 @@ import '../db_manager.dart';
 import '../network_manager.dart';
 import '../models.dart';
 import '../recommendation_engine.dart';
+import '../theme.dart';
 import 'create_post_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -25,7 +26,6 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _loadingUser = true;
   UserModel? _userModel;
   List<OutfitPost> _myPosts = [];
-  bool _loadingPosts = false;
   List<Map<String, dynamic>> _recentOutfits = [];
 
   @override
@@ -142,8 +142,11 @@ class _ProfilePageState extends State<ProfilePage> {
     final userModel = _userModel;
 
     if (_loadingUser) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        backgroundColor: SapemoiTheme.background,
+        body: Center(
+          child: CircularProgressIndicator(color: SapemoiTheme.primary),
+        ),
       );
     }
 
@@ -151,480 +154,67 @@ class _ProfilePageState extends State<ProfilePage> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) Navigator.of(context).pushReplacementNamed('/login');
       });
-      return const Scaffold();
+      return Scaffold(backgroundColor: SapemoiTheme.background);
     }
 
     final mostWorn = [..._clothes]..sort((a, b) => b.wearCount.compareTo(a.wearCount));
     final leastWorn = [..._clothes]..sort((a, b) => a.wearCount.compareTo(b.wearCount));
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            CircleAvatar(
-              radius: 60,
-              backgroundImage: userModel.photoURL != null
-                ? NetworkImage(userModel.photoURL!)
-                : null,
-              child: userModel.photoURL == null
-                ? const Icon(Icons.person, size: 60)
-                : null,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              userModel.displayName ?? 'Anonymous',
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              userModel.email,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 40),
-            
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.attach_money, color: Colors.green, size: 32),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Wardrobe Value',
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: _loadingValue ? null : _estimateWardrobeValue,
-                          style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
-                          child: _loadingValue
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : Text(_wardrobeValue == null ? 'Estimate' : 'Re-estimate'),
-                        ),
-                      ],
-                    ),
-                    if (_wardrobeValue != null) ...[
-                      const SizedBox(height: 16),
-                      Center(
-                        child: Text(
-                          '\$${_wardrobeValue!.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Center(
-                        child: Text(
-                          'Based on ${_clothes.length} items',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+      backgroundColor: SapemoiTheme.background,
+      body: RefreshIndicator(
+        color: SapemoiTheme.primary,
+        backgroundColor: SapemoiTheme.surface,
+        onRefresh: _loadData,
+        child: CustomScrollView(
+          slivers: [
+            // Header avec photo de profil
+            SliverToBoxAdapter(
+              child: _buildProfileHeader(userModel),
             ),
             
-            const SizedBox(height: 24),
-
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_storedStyle != null) ...[
-                      Row(
-                        children: [
-                          const Icon(Icons.palette, color: Colors.purple, size: 28),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Style: ${_capitalizeFirst(_storedStyle!.styleType)}',
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      if (_storedStyle!.topBrands.isNotEmpty)
-                        Text('Favorite brands: ${_storedStyle!.topBrands.map((b) => _capitalizeFirst(b)).join(", ")}', style: TextStyle(color: Colors.grey[700])),
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: _loadingStyle ? null : _estimateStyle,
-                        icon: _loadingStyle
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.style),
-                        label: const Text('Re-estimate Style'),
-                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
-                      ),
-                      const Divider(height: 32),
-                    ] else ...[
-                      Row(
-                        children: [
-                          const Icon(Icons.palette, color: Colors.purple, size: 28),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'No style estimated yet',
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: _loadingStyle ? null : _estimateStyle,
-                        icon: _loadingStyle
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.style),
-                        label: const Text('Estimate Style'),
-                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
-                      ),
-                      const Divider(height: 32),
-                    ],
-                    const Row(
-                      children: [
-                        Icon(Icons.star, color: Colors.amber, size: 32),
-                        SizedBox(width: 12),
-                        Text(
-                          'Most Worn Items',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    if (mostWorn.isEmpty)
-                      const Center(
-                        child: Text('No items worn yet'),
-                      )
-                    else
-                      SizedBox(
-                        height: 120,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: mostWorn.take(5).length,
-                          itemBuilder: (context, index) {
-                            final item = mostWorn[index];
-                            return Container(
-                              width: 100,
-                              margin: const EdgeInsets.only(right: 12),
-                              child: Column(
-                                children: [
-                                  Container(
-                                    height: 80,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: Colors.amber, width: 2),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: Image.network(
-                                        item.imageUrl,
-                                        fit: BoxFit.cover,
-                                        loadingBuilder: (context, child, loadingProgress) {
-                                          if (loadingProgress == null) return child;
-                                          return const Center(child: CircularProgressIndicator());
-                                        },
-                                        errorBuilder: (context, error, stackTrace) {
-                                          return Container(
-                                            color: Colors.grey[300],
-                                            child: const Icon(Icons.image, size: 40),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${item.wearCount}x worn',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+            // Stats rapides
+            SliverToBoxAdapter(
+              child: _buildQuickStats(),
             ),
             
-            const SizedBox(height: 24),
-            
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.shopping_bag_outlined, color: Colors.orange, size: 32),
-                        SizedBox(width: 12),
-                        Text(
-                          'Least Worn Items',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Consider selling these items',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (leastWorn.isEmpty)
-                      const Center(
-                        child: Text('No items to show'),
-                      )
-                    else
-                      SizedBox(
-                        height: 120,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: leastWorn.take(5).length,
-                          itemBuilder: (context, index) {
-                            final item = leastWorn[index];
-                            return Container(
-                              width: 100,
-                              margin: const EdgeInsets.only(right: 12),
-                              child: Column(
-                                children: [
-                                  Container(
-                                    height: 80,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: Colors.orange, width: 2),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: Image.network(
-                                        item.imageUrl,
-                                        fit: BoxFit.cover,
-                                        loadingBuilder: (context, child, loadingProgress) {
-                                          if (loadingProgress == null) return child;
-                                          return const Center(child: CircularProgressIndicator());
-                                        },
-                                        errorBuilder: (context, error, stackTrace) {
-                                          return Container(
-                                            color: Colors.grey[300],
-                                            child: const Icon(Icons.image, size: 40),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    item.wearCount == 0 ? 'Never worn' : '${item.wearCount}x worn',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+            // Wardrobe Value Card
+            SliverToBoxAdapter(
+              child: _buildWardrobeValueCard(),
             ),
             
-            const SizedBox(height: 24),
-            
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.photo_library, color: Colors.purple, size: 28),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text(
-                            'My Posts',
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        if (_recentOutfits.isNotEmpty)
-                          ElevatedButton.icon(
-                            onPressed: () => _showPostLastOutfitDialog(),
-                            icon: const Icon(Icons.add_a_photo, size: 18),
-                            label: const Text('Post Last'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.purple,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    if (_myPosts.isEmpty)
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            children: [
-                              Icon(Icons.photo_library_outlined, size: 48, color: Colors.grey[400]),
-                              const SizedBox(height: 8),
-                              Text(
-                                'No posts yet',
-                                style: TextStyle(color: Colors.grey[600]),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      SizedBox(
-                        height: 200,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _myPosts.length,
-                          itemBuilder: (context, index) {
-                            final post = _myPosts[index];
-                            return _buildPostThumbnail(post);
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+            // Style Card
+            SliverToBoxAdapter(
+              child: _buildStyleCard(),
             ),
             
-            const SizedBox(height: 32),
-            
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    _buildInfoRow(
-                      icon: Icons.email,
-                      label: 'Email',
-                      value: userModel.email,
-                    ),
-                    const Divider(height: 32),
-                    _buildInfoRow(
-                      icon: Icons.badge,
-                      label: 'User ID',
-                      value: '${userModel.uid.substring(0, 12)}...',
-                    ),
-                    const Divider(height: 32),
-                    _buildInfoRow(
-                      icon: Icons.verified_user,
-                      label: 'Email Verified',
-                      value: (FirebaseAuth.instance.currentUser?.emailVerified ?? false) ? 'Yes' : 'No',
-                    ),
-                  ],
-                ),
-              ),
+            // Most Worn
+            SliverToBoxAdapter(
+              child: _buildMostWornSection(mostWorn),
             ),
-            const SizedBox(height: 32),
             
-            if (_recentOutfits.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: OutlinedButton.icon(
-                  onPressed: () => _showClearWornOutfitsDialog(),
-                  icon: const Icon(Icons.delete_sweep),
-                  label: const Text('Clear Worn Outfits History'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.orange,
-                    side: const BorderSide(color: Colors.orange, width: 2),
-                    minimumSize: const Size.fromHeight(50),
-                  ),
-                ),
-              ),
+            // Least Worn
+            SliverToBoxAdapter(
+              child: _buildLeastWornSection(leastWorn),
+            ),
             
-            ElevatedButton(
-              onPressed: () async {
-                RecommendationEngine.clearCache();
-                await AuthManager().signOut();
-                if (context.mounted) {
-                  Navigator.of(context).pushReplacementNamed('/login');
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(50),
-              ),
-              child: const Text('Sign Out'),
+            // My Posts
+            SliverToBoxAdapter(
+              child: _buildPostsSection(),
+            ),
+            
+            // Account Info
+            SliverToBoxAdapter(
+              child: _buildAccountInfo(userModel),
+            ),
+            
+            // Actions
+            SliverToBoxAdapter(
+              child: _buildActions(),
+            ),
+            
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 100),
             ),
           ],
         ),
@@ -632,44 +222,647 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildInfoRow({
+  Widget _buildProfileHeader(UserModel userModel) {
+    return Container(
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 20,
+        left: 24,
+        right: 24,
+        bottom: 24,
+      ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            SapemoiTheme.primary.withOpacity(0.15),
+            SapemoiTheme.background,
+          ],
+        ),
+      ),
+      child: Column(
+        children: [
+          // Avatar avec glow
+          Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: SapemoiTheme.primary.withOpacity(0.4),
+                  blurRadius: 30,
+                  spreadRadius: 5,
+                ),
+              ],
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: SapemoiTheme.primaryGradient,
+              ),
+              child: CircleAvatar(
+                radius: 50,
+                backgroundColor: SapemoiTheme.surface,
+                backgroundImage: userModel.photoURL != null
+                  ? NetworkImage(userModel.photoURL!)
+                  : null,
+                child: userModel.photoURL == null
+                  ? Icon(Icons.person, size: 50, color: SapemoiTheme.textMuted)
+                  : null,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Nom
+          Text(
+            userModel.displayName ?? 'Anonymous',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: SapemoiTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          
+          // Email
+          Text(
+            userModel.email,
+            style: TextStyle(
+              fontSize: 14,
+              color: SapemoiTheme.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickStats() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildStatCard(
+              icon: Icons.checkroom,
+              value: '${_clothes.length}',
+              label: 'Items',
+              color: SapemoiTheme.primary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildStatCard(
+              icon: Icons.photo_library,
+              value: '${_myPosts.length}',
+              label: 'Posts',
+              color: SapemoiTheme.accent,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildStatCard(
+              icon: Icons.history,
+              value: '${_recentOutfits.length}',
+              label: 'Outfits',
+              color: const Color(0xFF22C55E),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard({
     required IconData icon,
-    required String label,
     required String value,
+    required String label,
+    required Color color,
   }) {
-    return Row(
-      children: [
-        Icon(icon, color: Colors.purple),
-        const SizedBox(width: 16),
-        Expanded(
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      decoration: BoxDecoration(
+        color: SapemoiTheme.surface,
+        borderRadius: BorderRadius.circular(SapemoiTheme.radiusMd),
+        border: Border.all(color: SapemoiTheme.border),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: SapemoiTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: SapemoiTheme.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWardrobeValueCard() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              const Color(0xFF22C55E).withOpacity(0.15),
+              SapemoiTheme.surface,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(SapemoiTheme.radiusLg),
+          border: Border.all(color: const Color(0xFF22C55E).withOpacity(0.3)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF22C55E).withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(SapemoiTheme.radiusSm),
+                    ),
+                    child: const Icon(Icons.account_balance_wallet, color: Color(0xFF22C55E), size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Wardrobe Value',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: SapemoiTheme.textPrimary,
+                      ),
+                    ),
+                  ),
+                  _buildActionButton(
+                    onPressed: _loadingValue ? null : _estimateWardrobeValue,
+                    label: _wardrobeValue == null ? 'Estimate' : 'Refresh',
+                    isLoading: _loadingValue,
+                    color: const Color(0xFF22C55E),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
+              if (_wardrobeValue != null) ...[
+                const SizedBox(height: 20),
+                Center(
+                  child: ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Color(0xFF22C55E), Color(0xFF10B981)],
+                    ).createShader(bounds),
+                    child: Text(
+                      '\$${_wardrobeValue!.toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        fontSize: 42,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Center(
+                  child: Text(
+                    'Based on ${_clothes.length} items',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: SapemoiTheme.textMuted,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStyleCard() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              SapemoiTheme.primary.withOpacity(0.15),
+              SapemoiTheme.surface,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(SapemoiTheme.radiusLg),
+          border: Border.all(color: SapemoiTheme.primary.withOpacity(0.3)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: SapemoiTheme.primary.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(SapemoiTheme.radiusSm),
+                    ),
+                    child: Icon(Icons.palette, color: SapemoiTheme.primary, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _storedStyle != null ? 'Your Style' : 'Style Profile',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: SapemoiTheme.textPrimary,
+                          ),
+                        ),
+                        if (_storedStyle != null)
+                          Text(
+                            _capitalizeFirst(_storedStyle!.styleType),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: SapemoiTheme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  _buildActionButton(
+                    onPressed: _loadingStyle ? null : _estimateStyle,
+                    label: _storedStyle == null ? 'Analyze' : 'Update',
+                    isLoading: _loadingStyle,
+                    color: SapemoiTheme.primary,
+                  ),
+                ],
+              ),
+              if (_storedStyle != null && _storedStyle!.topBrands.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _storedStyle!.topBrands.take(4).map((brand) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: SapemoiTheme.surfaceLight,
+                        borderRadius: BorderRadius.circular(SapemoiTheme.radiusFull),
+                        border: Border.all(color: SapemoiTheme.border),
+                      ),
+                      child: Text(
+                        _capitalizeFirst(brand),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: SapemoiTheme.textSecondary,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required VoidCallback? onPressed,
+    required String label,
+    required bool isLoading,
+    required Color color,
+  }) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(SapemoiTheme.radiusFull),
+          border: Border.all(color: color.withOpacity(0.5)),
+        ),
+        child: isLoading
+          ? SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: color,
+              ),
+            )
+          : Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+      ),
+    );
+  }
+
+  Widget _buildMostWornSection(List<Clothing> mostWorn) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.star_rounded, color: const Color(0xFFFBBF24), size: 24),
+              const SizedBox(width: 8),
               Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
+                'Most Worn',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: SapemoiTheme.textPrimary,
                 ),
               ),
             ],
           ),
-        ),
-      ],
+          const SizedBox(height: 16),
+          if (mostWorn.isEmpty)
+            _buildEmptySection('No items worn yet')
+          else
+            SizedBox(
+              height: 130,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: mostWorn.take(5).length,
+                itemBuilder: (context, index) {
+                  final item = mostWorn[index];
+                  return _buildWornItemCard(
+                    item,
+                    '${item.wearCount}x',
+                    const Color(0xFFFBBF24),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
     );
   }
 
-  String _capitalizeFirst(String text) {
-    if (text.isEmpty) return text;
-    return text[0].toUpperCase() + text.substring(1);
+  Widget _buildLeastWornSection(List<Clothing> leastWorn) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.sell_outlined, color: SapemoiTheme.primaryLight, size: 24),
+              const SizedBox(width: 8),
+              Text(
+                'Consider Selling',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: SapemoiTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Items that could find a new home',
+            style: TextStyle(
+              fontSize: 13,
+              color: SapemoiTheme.textMuted,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (leastWorn.isEmpty)
+            _buildEmptySection('No items to show')
+          else
+            SizedBox(
+              height: 130,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: leastWorn.take(5).length,
+                itemBuilder: (context, index) {
+                  final item = leastWorn[index];
+                  return _buildWornItemCard(
+                    item,
+                    item.wearCount == 0 ? 'Never' : '${item.wearCount}x',
+                    SapemoiTheme.primaryLight,
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWornItemCard(Clothing item, String label, Color accentColor) {
+    return Container(
+      width: 100,
+      margin: const EdgeInsets.only(right: 12),
+      child: Column(
+        children: [
+          Container(
+            height: 90,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(SapemoiTheme.radiusMd),
+              border: Border.all(color: accentColor.withOpacity(0.5), width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: accentColor.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(SapemoiTheme.radiusMd - 2),
+              child: CachedNetworkImage(
+                imageUrl: item.imageUrl,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                placeholder: (context, url) => Container(
+                  color: SapemoiTheme.surfaceLight,
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: SapemoiTheme.primary,
+                    ),
+                  ),
+                ),
+                errorWidget: (context, url, error) => Container(
+                  color: SapemoiTheme.surfaceLight,
+                  child: Icon(Icons.image, color: SapemoiTheme.textMuted),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: accentColor.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(SapemoiTheme.radiusFull),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: accentColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptySection(String message) {
+    return Container(
+      height: 100,
+      decoration: BoxDecoration(
+        color: SapemoiTheme.surface,
+        borderRadius: BorderRadius.circular(SapemoiTheme.radiusMd),
+        border: Border.all(color: SapemoiTheme.border),
+      ),
+      child: Center(
+        child: Text(
+          message,
+          style: TextStyle(
+            color: SapemoiTheme.textMuted,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPostsSection() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.photo_library_rounded, color: SapemoiTheme.accent, size: 24),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'My Posts',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: SapemoiTheme.textPrimary,
+                  ),
+                ),
+              ),
+              if (_recentOutfits.isNotEmpty)
+                GestureDetector(
+                  onTap: _showPostLastOutfitDialog,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      gradient: SapemoiTheme.accentGradient,
+                      borderRadius: BorderRadius.circular(SapemoiTheme.radiusFull),
+                      boxShadow: [SapemoiTheme.shadowGlow(SapemoiTheme.accent)],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.add_a_photo, color: Colors.white, size: 14),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'Post Last',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_myPosts.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: SapemoiTheme.surface,
+                borderRadius: BorderRadius.circular(SapemoiTheme.radiusLg),
+                border: Border.all(color: SapemoiTheme.border),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.photo_library_outlined,
+                    size: 48,
+                    color: SapemoiTheme.textMuted,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No posts yet',
+                    style: TextStyle(
+                      color: SapemoiTheme.textMuted,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Share your outfits with the community',
+                    style: TextStyle(
+                      color: SapemoiTheme.textMuted.withOpacity(0.7),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            SizedBox(
+              height: 200,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _myPosts.length,
+                itemBuilder: (context, index) {
+                  return _buildPostThumbnail(_myPosts[index]);
+                },
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _buildPostThumbnail(OutfitPost post) {
@@ -682,72 +875,92 @@ class _ProfilePageState extends State<ProfilePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    CachedNetworkImage(
-                      imageUrl: post.imageUrl,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
-                        color: Colors.grey[300],
-                        child: const Center(child: CircularProgressIndicator()),
-                      ),
-                      errorWidget: (context, url, error) => Container(
-                        color: Colors.grey[300],
-                        child: const Icon(Icons.error),
-                      ),
-                    ),
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: GestureDetector(
-                        onTap: () => _showDeletePostDialog(post),
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.8),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.delete_outline,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.6),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.favorite, color: Colors.red, size: 14),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${post.likes}',
-                              style: const TextStyle(color: Colors.white, fontSize: 12),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(SapemoiTheme.radiusMd),
+                  border: Border.all(color: SapemoiTheme.border),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(SapemoiTheme.radiusMd - 1),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CachedNetworkImage(
+                        imageUrl: post.imageUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          color: SapemoiTheme.surfaceLight,
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: SapemoiTheme.primary,
                             ),
-                          ],
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: SapemoiTheme.surfaceLight,
+                          child: Icon(Icons.error, color: SapemoiTheme.textMuted),
                         ),
                       ),
-                    ),
-                  ],
+                      // Delete button
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: GestureDetector(
+                          onTap: () => _showDeletePostDialog(post),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444).withOpacity(0.9),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Likes badge
+                      Positioned(
+                        bottom: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: SapemoiTheme.background.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(SapemoiTheme.radiusFull),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.favorite, color: SapemoiTheme.accent, size: 12),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${post.likes}',
+                                style: TextStyle(
+                                  color: SapemoiTheme.textPrimary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               post.description.isEmpty ? 'No caption' : post.description,
-              style: const TextStyle(fontSize: 12),
+              style: TextStyle(
+                fontSize: 12,
+                color: SapemoiTheme.textSecondary,
+              ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -757,16 +970,188 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Widget _buildAccountInfo(UserModel userModel) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: SapemoiTheme.surface,
+          borderRadius: BorderRadius.circular(SapemoiTheme.radiusLg),
+          border: Border.all(color: SapemoiTheme.border),
+        ),
+        child: Column(
+          children: [
+            _buildInfoRow(
+              icon: Icons.email_outlined,
+              label: 'Email',
+              value: userModel.email,
+            ),
+            Divider(color: SapemoiTheme.border, height: 1),
+            _buildInfoRow(
+              icon: Icons.fingerprint,
+              label: 'User ID',
+              value: '${userModel.uid.substring(0, 12)}...',
+            ),
+            Divider(color: SapemoiTheme.border, height: 1),
+            _buildInfoRow(
+              icon: Icons.verified_outlined,
+              label: 'Email Verified',
+              value: (FirebaseAuth.instance.currentUser?.emailVerified ?? false) ? 'Yes' : 'No',
+              valueColor: (FirebaseAuth.instance.currentUser?.emailVerified ?? false)
+                ? const Color(0xFF22C55E)
+                : SapemoiTheme.textMuted,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color? valueColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Icon(icon, color: SapemoiTheme.primary, size: 22),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: SapemoiTheme.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: valueColor ?? SapemoiTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActions() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          if (_recentOutfits.isNotEmpty)
+            GestureDetector(
+              onTap: _showClearWornOutfitsDialog,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  color: SapemoiTheme.surface,
+                  borderRadius: BorderRadius.circular(SapemoiTheme.radiusMd),
+                  border: Border.all(color: SapemoiTheme.primaryMuted.withOpacity(0.5)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.delete_sweep, color: SapemoiTheme.primaryLight, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Clear Worn Outfits History',
+                      style: TextStyle(
+                        color: SapemoiTheme.primaryLight,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () async {
+              RecommendationEngine.clearCache();
+              await AuthManager().signOut();
+              if (context.mounted) {
+                Navigator.of(context).pushReplacementNamed('/login');
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+                ),
+                borderRadius: BorderRadius.circular(SapemoiTheme.radiusMd),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFEF4444).withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.logout, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Sign Out',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _capitalizeFirst(String text) {
+    if (text.isEmpty) return text;
+    return text[0].toUpperCase() + text.substring(1);
+  }
+
   void _showDeletePostDialog(OutfitPost post) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Post?'),
-        content: const Text('This action cannot be undone.'),
+        backgroundColor: SapemoiTheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(SapemoiTheme.radiusLg),
+        ),
+        title: Text(
+          'Delete Post?',
+          style: TextStyle(color: SapemoiTheme.textPrimary),
+        ),
+        content: Text(
+          'This action cannot be undone.',
+          style: TextStyle(color: SapemoiTheme.textSecondary),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: SapemoiTheme.textMuted),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -777,14 +1162,20 @@ class _ProfilePageState extends State<ProfilePage> {
                 _loadData();
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Post deleted')),
+                    SnackBar(
+                      content: const Text('Post deleted'),
+                      backgroundColor: SapemoiTheme.surface,
+                    ),
                   );
                 }
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: const Color(0xFFEF4444),
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(SapemoiTheme.radiusSm),
+              ),
             ),
             child: const Text('Delete'),
           ),
@@ -802,7 +1193,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
     if (outfitItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No outfit items found')),
+        SnackBar(
+          content: const Text('No outfit items found'),
+          backgroundColor: SapemoiTheme.surface,
+        ),
       );
       return;
     }
@@ -810,21 +1204,51 @@ class _ProfilePageState extends State<ProfilePage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Post Last Worn Outfit?'),
+        backgroundColor: SapemoiTheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(SapemoiTheme.radiusLg),
+        ),
+        title: Text(
+          'Post Last Worn Outfit?',
+          style: TextStyle(color: SapemoiTheme.textPrimary),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Your last worn outfit:'),
+            Text(
+              'Your last worn outfit:',
+              style: TextStyle(color: SapemoiTheme.textSecondary),
+            ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: outfitItems.map((item) {
-                return Chip(
-                  avatar: CircleAvatar(
-                    backgroundImage: NetworkImage(item.imageUrl),
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: SapemoiTheme.surfaceLight,
+                    borderRadius: BorderRadius.circular(SapemoiTheme.radiusFull),
+                    border: Border.all(color: SapemoiTheme.border),
                   ),
-                  label: Text(item.name),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundImage: NetworkImage(item.imageUrl),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        item.name,
+                        style: TextStyle(
+                          color: SapemoiTheme.textPrimary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               }).toList(),
             ),
@@ -833,7 +1257,10 @@ class _ProfilePageState extends State<ProfilePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: SapemoiTheme.textMuted),
+            ),
           ),
           ElevatedButton.icon(
             onPressed: () {
@@ -845,11 +1272,14 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ).then((_) => _loadData());
             },
-            icon: const Icon(Icons.send),
+            icon: const Icon(Icons.send, size: 16),
             label: const Text('Post It'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple,
+              backgroundColor: SapemoiTheme.primary,
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(SapemoiTheme.radiusSm),
+              ),
             ),
           ),
         ],
@@ -861,14 +1291,25 @@ class _ProfilePageState extends State<ProfilePage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Clear Worn Outfits?'),
+        backgroundColor: SapemoiTheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(SapemoiTheme.radiusLg),
+        ),
+        title: Text(
+          'Clear Worn Outfits?',
+          style: TextStyle(color: SapemoiTheme.textPrimary),
+        ),
         content: Text(
           'This will delete all ${_recentOutfits.length} worn outfit records from your history. This action cannot be undone.',
+          style: TextStyle(color: SapemoiTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: SapemoiTheme.textMuted),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -879,14 +1320,20 @@ class _ProfilePageState extends State<ProfilePage> {
                 await _loadData();
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('✨ Worn outfits history cleared')),
+                    SnackBar(
+                      content: const Text('✨ Worn outfits history cleared'),
+                      backgroundColor: SapemoiTheme.surface,
+                    ),
                   );
                 }
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
+              backgroundColor: SapemoiTheme.primary,
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(SapemoiTheme.radiusSm),
+              ),
             ),
             child: const Text('Clear All'),
           ),
